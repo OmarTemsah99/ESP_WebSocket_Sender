@@ -2,6 +2,8 @@
 #include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <map>
+#include <string>
 
 // WiFi credentials
 const char *ssid = "TemsahDSLX";
@@ -49,12 +51,20 @@ void setDisconnectedIndicator()
   pixel.show();
 }
 
+// Store sensor data from different ESPs
+struct SensorData
+{
+  int value;
+  unsigned long lastUpdate;
+};
+std::map<String, SensorData> sensorDataMap;
+
 // HTML page
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 NeoPixel Control</title>
+    <title>ESP32 Control Center</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial; text-align: center; margin: 20px; }
@@ -65,16 +75,35 @@ const char index_html[] PROGMEM = R"rawliteral(
             margin: 20px auto;
             border: 2px solid #333;
         }
+        .sensor-data {
+            margin: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .sensor {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
-    <h1>NeoPixel Control</h1>
+    <h1>ESP32 Control Center</h1>
     <div class="color-preview" id="colorPreview"></div>
-    <p>
-        Red: <input type="range" class="slider" id="red" min="0" max="255" value="0" oninput="updateColor()"><br>
-        Green: <input type="range" class="slider" id="green" min="0" max="255" value="0" oninput="updateColor()"><br>
-        Blue: <input type="range" class="slider" id="blue" min="0" max="255" value="0" oninput="updateColor()">
-    </p>
+    <div class="rgb-control">
+        <h2>RGB LED Control</h2>
+        <p>
+            Red: <input type="range" class="slider" id="red" min="0" max="255" value="0" oninput="updateColor()"><br>
+            Green: <input type="range" class="slider" id="green" min="0" max="255" value="0" oninput="updateColor()"><br>
+            Blue: <input type="range" class="slider" id="blue" min="0" max="255" value="0" oninput="updateColor()">
+        </p>
+    </div>
+    <div class="sensor-data">
+        <h2>Sensor Data</h2>
+        <div id="sensorList"></div>
+    </div>
     <script>
         function updateColor() {
             var r = document.getElementById('red').value;
@@ -85,10 +114,82 @@ const char index_html[] PROGMEM = R"rawliteral(
             fetch('/color?r=' + r + '&g=' + g + '&b=' + b)
                 .catch(error => console.error('Error:', error));
         }
+
+        function updateSensorData() {
+            fetch('/sensorData')
+                .then(response => response.json())
+                .then(data => {
+                    const sensorList = document.getElementById('sensorList');
+                    sensorList.innerHTML = '';
+                    for (const [ip, sensorInfo] of Object.entries(data)) {
+                        const sensorDiv = document.createElement('div');
+                        sensorDiv.className = 'sensor';
+                        const age = Math.floor((Date.now() - sensorInfo.lastUpdate) / 1000);
+                        sensorDiv.innerHTML = `
+                            <strong>ESP ID (IP): ${ip}</strong><br>
+                            Sensor Value: ${sensorInfo.value}<br>
+                            Last Update: ${age} seconds ago
+                        `;
+                        sensorList.appendChild(sensorDiv);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Update sensor data every second
+        setInterval(updateSensorData, 1000);
     </script>
 </body>
 </html>
 )rawliteral";
+
+// Handle sensor data submission
+void handleSensorData()
+{
+  String senderIP = server.client().remoteIP().toString();
+  int sensorValue = server.arg("value").toInt();
+
+  // Update sensor data
+  sensorDataMap[senderIP] = {
+      sensorValue,
+      millis()};
+
+  // If sensor value is 1, set LED to blue, if 0 set to red
+  if (sensorValue == 1)
+  {
+    pixel.setPixelColor(0, pixel.Color(0, 0, 255)); // Blue
+  }
+  else
+  {
+    pixel.setPixelColor(0, pixel.Color(255, 0, 0)); // Red
+  }
+  pixel.show();
+
+  server.send(200, "text/plain", "OK");
+}
+
+// Handle sensor data request from web page
+void handleGetSensorData()
+{
+  String json = "{";
+  bool first = true;
+
+  for (const auto &pair : sensorDataMap)
+  {
+    if (!first)
+    {
+      json += ",";
+    }
+    json += "\"" + pair.first + "\":{";
+    json += "\"value\":" + String(pair.second.value) + ",";
+    json += "\"lastUpdate\":" + String(pair.second.lastUpdate);
+    json += "}";
+    first = false;
+  }
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
 
 void handleRoot()
 {
@@ -165,6 +266,8 @@ void setup()
     // Setup web server routes
     server.on("/", handleRoot);
     server.on("/color", handleColor);
+    server.on("/sensor", HTTP_POST, handleSensorData);
+    server.on("/sensorData", HTTP_GET, handleGetSensorData);
 
     // Start web server
     server.begin();
