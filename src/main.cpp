@@ -2,6 +2,9 @@
 #include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
+#include <WiFiUDP.h>
+#include <ArduinoOTA.h>
 #include <map>
 #include <string>
 
@@ -64,42 +67,41 @@ const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Control Center</title>
+    <title>ESP32 Sensor Monitor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: Arial; text-align: center; margin: 20px; }
-        .slider { width: 200px; }
-        .color-preview {
-            width: 100px;
-            height: 100px;
-            margin: 20px auto;
-            border: 2px solid #333;
+        body { 
+            font-family: Arial; 
+            text-align: center; 
+            margin: 20px;
+            background-color: #f5f5f5;
         }
         .sensor-data {
-            margin: 20px;
-            padding: 10px;
+            margin: 20px auto;
+            padding: 20px;
             border: 1px solid #ccc;
-            border-radius: 5px;
+            border-radius: 10px;
+            background-color: white;
+            max-width: 600px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .sensor {
-            margin: 10px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 5px;
+            margin: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        h2 {
+            color: #34495e;
         }
     </style>
 </head>
 <body>
-    <h1>ESP32 Control Center</h1>
-    <div class="color-preview" id="colorPreview"></div>
-    <div class="rgb-control">
-        <h2>RGB LED Control</h2>
-        <p>
-            Red: <input type="range" class="slider" id="red" min="0" max="255" value="0" oninput="updateColor()"><br>
-            Green: <input type="range" class="slider" id="green" min="0" max="255" value="0" oninput="updateColor()"><br>
-            Blue: <input type="range" class="slider" id="blue" min="0" max="255" value="0" oninput="updateColor()">
-        </p>
-    </div>
+    <h1>ESP32 Sensor Monitor</h1>
     <div class="sensor-data">
         <h2>Sensor Data</h2>
         <div id="sensorList"></div>
@@ -267,11 +269,41 @@ void setup()
     server.on("/", handleRoot);
     server.on("/color", handleColor);
     server.on("/sensor", HTTP_POST, handleSensorData);
-    server.on("/sensorData", HTTP_GET, handleGetSensorData);
-
-    // Start web server
+    server.on("/sensorData", HTTP_GET, handleGetSensorData); // Start web server
     server.begin();
     Serial.println("HTTP server started");
+
+    // Configure OTA
+    ArduinoOTA.setHostname("ESP32-Sensor-Monitor");
+    ArduinoOTA.setPassword("admin"); // Set OTA password
+
+    ArduinoOTA.onStart([]()
+                       {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH) {
+        type = "sketch";
+      } else {
+        type = "filesystem";
+      }
+      Serial.println("Start updating " + type); });
+
+    ArduinoOTA.onEnd([]()
+                     { Serial.println("\nEnd"); });
+
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+                          { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); });
+
+    ArduinoOTA.onError([](ota_error_t error)
+                       {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed"); });
+
+    ArduinoOTA.begin();
+    Serial.println("OTA Ready");
   }
   else
   {
@@ -307,6 +339,8 @@ void setup()
 
 void loop()
 {
+  ArduinoOTA.handle(); // Handle OTA updates
+
   // Check WiFi connection status
   if (WiFi.status() != WL_CONNECTED)
   {
