@@ -57,10 +57,10 @@ void setDisconnectedIndicator()
 // Store sensor data from different ESPs
 struct SensorData
 {
+  String clientId;
   int value;
-  unsigned long lastUpdate;
 };
-std::map<String, SensorData> sensorDataMap;
+std::map<String, SensorData> sensorDataMap; // Key is IP address
 
 // HTML page
 const char index_html[] PROGMEM = R"rawliteral(
@@ -107,16 +107,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         <div id="sensorList"></div>
     </div>
     <script>
-        function updateColor() {
-            var r = document.getElementById('red').value;
-            var g = document.getElementById('green').value;
-            var b = document.getElementById('blue').value;
-            document.getElementById('colorPreview').style.backgroundColor = 
-                'rgb(' + r + ',' + g + ',' + b + ')';
-            fetch('/color?r=' + r + '&g=' + g + '&b=' + b)
-                .catch(error => console.error('Error:', error));
-        }
-
         function updateSensorData() {
             fetch('/sensorData')
                 .then(response => response.json())
@@ -126,11 +116,10 @@ const char index_html[] PROGMEM = R"rawliteral(
                     for (const [ip, sensorInfo] of Object.entries(data)) {
                         const sensorDiv = document.createElement('div');
                         sensorDiv.className = 'sensor';
-                        const age = Math.floor((Date.now() - sensorInfo.lastUpdate) / 1000);
                         sensorDiv.innerHTML = `
-                            <strong>ESP ID (IP): ${ip}</strong><br>
-                            Sensor Value: ${sensorInfo.value}<br>
-                            Last Update: ${age} seconds ago
+                            <strong>Client ID: ${sensorInfo.clientId}</strong><br>
+                            IP Address: ${ip}<br>
+                            Sensor Value: ${sensorInfo.value}
                         `;
                         sensorList.appendChild(sensorDiv);
                     }
@@ -138,8 +127,8 @@ const char index_html[] PROGMEM = R"rawliteral(
                 .catch(error => console.error('Error:', error));
         }
 
-        // Update sensor data every second
-        setInterval(updateSensorData, 1000);
+        // Update sensor data every 50ms for more responsive updates
+        setInterval(updateSensorData, 50);
     </script>
 </body>
 </html>
@@ -149,12 +138,13 @@ const char index_html[] PROGMEM = R"rawliteral(
 void handleSensorData()
 {
   String senderIP = server.client().remoteIP().toString();
+  String clientId = server.arg("clientId");
   int sensorValue = server.arg("value").toInt();
 
   // Update sensor data
   sensorDataMap[senderIP] = {
-      sensorValue,
-      millis()};
+      clientId,
+      sensorValue};
 
   // If sensor value is 1, set LED to blue, if 0 set to red
   if (sensorValue == 1)
@@ -183,8 +173,8 @@ void handleGetSensorData()
       json += ",";
     }
     json += "\"" + pair.first + "\":{";
-    json += "\"value\":" + String(pair.second.value) + ",";
-    json += "\"lastUpdate\":" + String(pair.second.lastUpdate);
+    json += "\"clientId\":\"" + pair.second.clientId + "\",";
+    json += "\"value\":" + String(pair.second.value);
     json += "}";
     first = false;
   }
