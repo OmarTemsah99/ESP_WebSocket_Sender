@@ -1,8 +1,8 @@
 #include "config.h"
 
 // WiFi credentials - modify these for your network
-const char *WIFI_SSID = "NetworkName";
-const char *WIFI_PASSWORD = "NetworkPassword";
+const char *WIFI_SSID = "TemsahDSLX";
+const char *WIFI_PASSWORD = "#Tt01125115502";
 
 // Static IP configuration - modify these for your network
 const IPAddress STATIC_IP(192, 168, 1, 200);
