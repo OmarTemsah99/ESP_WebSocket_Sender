@@ -6,6 +6,7 @@
 #include <WiFiUDP.h>
 #include <ArduinoOTA.h>
 #include <SPIFFS.h>
+#include <Update.h>
 #include <map>
 #include <string>
 
@@ -179,6 +180,61 @@ void handleColor()
   server.send(200, "text/plain", "OK");
 }
 
+// Add new handlers for OTA web interface
+void handleFileUpload()
+{
+  HTTPUpload &upload = server.upload();
+  static File fsUploadFile;
+
+  if (upload.status == UPLOAD_FILE_START)
+  {
+    String filename = upload.filename;
+    if (!filename.startsWith("/"))
+      filename = "/" + filename;
+    Serial.printf("handleFileUpload Start: %s\n", filename.c_str());
+    fsUploadFile = SPIFFS.open(filename, "w");
+  }
+  else if (upload.status == UPLOAD_FILE_WRITE)
+  {
+    if (fsUploadFile)
+    {
+      fsUploadFile.write(upload.buf, upload.currentSize);
+    }
+  }
+  else if (upload.status == UPLOAD_FILE_END)
+  {
+    if (fsUploadFile)
+    {
+      fsUploadFile.close();
+      Serial.printf("handleFileUpload Success: %u bytes\n", upload.totalSize);
+    }
+  }
+}
+
+void handleUpload()
+{
+  String html = "<html><body>";
+  html += "<h2>File Upload</h2>";
+  html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
+  html += "<input type='file' name='upload'>";
+  html += "<input type='submit' value='Upload'>";
+  html += "</form>";
+  html += "<h3>Current Files:</h3><ul>";
+
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  while (file)
+  {
+    String fileName = file.name();
+    size_t fileSize = file.size();
+    html += "<li>" + String(fileName) + " - " + String(fileSize) + " bytes</li>";
+    file = root.openNextFile();
+  }
+  html += "</ul></body></html>";
+
+  server.send(200, "text/html", html);
+}
+
 void setup()
 {
   // Initialize Serial first for debugging
@@ -292,13 +348,6 @@ void setup()
     Serial.print(WiFi.RSSI());
     Serial.println(" dBm");
 
-    // Setup web server routes
-    server.on("/", HTTP_GET, handleRoot);
-    server.on("/sensor", HTTP_POST, handleSensorData);
-    server.on("/sensorData", HTTP_GET, handleGetSensorData);
-    server.begin();
-    Serial.println("HTTP server started");
-
     // Configure OTA
     ArduinoOTA.setHostname("ESP32-Sensor-Monitor");
     ArduinoOTA.setPassword("admin"); // Set OTA password
@@ -313,11 +362,19 @@ void setup()
       else
       {
         type = "filesystem";
+        // Unmount SPIFFS before OTA update
+        SPIFFS.end();
       }
       Serial.println("Start updating " + type); });
 
     ArduinoOTA.onEnd([]()
-                     { Serial.println("\nEnd"); });
+                     {
+      Serial.println("\nEnd");
+      // Remount SPIFFS after update
+      if (!SPIFFS.begin(true))
+      {
+        Serial.println("SPIFFS remount failed");
+      } });
 
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
                           { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); });
@@ -338,6 +395,16 @@ void setup()
 
     ArduinoOTA.begin();
     Serial.println("OTA Ready");
+
+    // Setup web server routes
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/sensor", HTTP_POST, handleSensorData);
+    server.on("/sensorData", HTTP_GET, handleGetSensorData);
+    server.on("/upload", HTTP_GET, handleUpload);
+    server.on("/upload", HTTP_POST, []()
+              { server.send(200, "text/plain", "Upload complete"); }, handleFileUpload);
+    server.begin();
+    Serial.println("HTTP server started");
   }
   else
   {
