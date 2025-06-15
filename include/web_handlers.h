@@ -3,7 +3,6 @@
 
 #include <WebServer.h>
 #include <SPIFFS.h>
-#include <Update.h>
 #include "sensor_manager.h"
 #include "led_controller.h"
 
@@ -25,11 +24,9 @@ public:
     void handleColor();
     void handleFileUpload();
     void handleUpload();
-    void handleFirmwareUpload();
-    void handleFirmwareUpdate();
     void handleDeleteFile();
-
+    void handleListFiles();
     void setupRoutes();
 };
 
-#endif // WEB_HANDLERS_H
+#endif

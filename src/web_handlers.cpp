@@ -119,225 +119,125 @@ void WebHandlers::handleFileUpload()
     }
 }
 
-void WebHandlers::handleFirmwareUpload()
-{
-    HTTPUpload &upload = server->upload();
-
-    if (upload.status == UPLOAD_FILE_START)
-    {
-        Serial.printf("Firmware Upload Start: %s\n", upload.filename.c_str());
-        Serial.setDebugOutput(true);
-
-        // Check if filename has .bin extension
-        if (!upload.filename.endsWith(".bin"))
-        {
-            Serial.println("Error: File must have .bin extension");
-            return;
-        }
-
-        // Set LED to indicate firmware update in progress
-        ledController->setColor(255, 255, 0); // Yellow for update in progress
-
-        // Calculate sketch space for firmware update
-        uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-        if (!Update.begin(maxSketchSpace, U_FLASH))
-        {
-            Serial.println("Error: Cannot start firmware update");
-            Update.printError(Serial);
-        }
-    }
-    else if (upload.status == UPLOAD_FILE_WRITE)
-    {
-        Serial.printf("Firmware Upload Progress: %u bytes\n", upload.totalSize);
-
-        // Write firmware data
-        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
-        {
-            Serial.println("Error: Failed to write firmware data");
-            Update.printError(Serial);
-        }
-    }
-    else if (upload.status == UPLOAD_FILE_END)
-    {
-        if (Update.end(true))
-        {
-            Serial.printf("Firmware Update Success: %u bytes\n", upload.totalSize);
-            Serial.println("Rebooting...");
-
-            // Set LED to indicate successful update
-            ledController->setColor(0, 255, 0); // Green for success
-            delay(1000);
-        }
-        else
-        {
-            Serial.println("Firmware Update Failed");
-            Update.printError(Serial);
-
-            // Set LED to indicate failed update
-            ledController->setColor(255, 0, 0); // Red for failure
-        }
-        Serial.setDebugOutput(false);
-    }
-    else if (upload.status == UPLOAD_FILE_ABORTED)
-    {
-        Serial.println("Firmware upload aborted");
-        Update.end();
-
-        // Set LED to indicate aborted update
-        ledController->setColor(255, 0, 0); // Red for failure
-    }
-}
-
-void WebHandlers::handleFirmwareUpdate()
-{
-    String html = "<html><head><title>Firmware Update</title>";
-    html += "<style>";
-    html += "body { font-family: Arial; text-align: center; margin: 20px; background-color: #f0f0f0; }";
-    html += ".container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }";
-    html += ".warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; margin: 15px 0; border-radius: 5px; }";
-    html += ".info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; margin: 15px 0; border-radius: 5px; }";
-    html += "input[type='file'] { margin: 10px; padding: 5px; }";
-    html += "input[type='submit'] { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }";
-    html += "input[type='submit']:hover { background-color: #0056b3; }";
-    html += ".back-btn { background-color: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px; }";
-    html += ".back-btn:hover { background-color: #545b62; }";
-    html += "</style></head><body>";
-
-    html += "<div class='container'>";
-    html += "<h1>ESP32 Firmware Update</h1>";
-
-    html += "<div class='warning'>";
-    html += "<strong>⚠️ Warning!</strong><br>";
-    html += "• Only upload .bin firmware files<br>";
-    html += "• Do not power off during update<br>";
-    html += "• Device will reboot after successful update<br>";
-    html += "• Make sure the firmware is compatible with your ESP32-S3";
-    html += "</div>";
-
-    html += "<div class='info'>";
-    html += "<strong>ℹ️ Information:</strong><br>";
-    html += "• Current Flash Size: " + String(ESP.getFlashChipSize() / 1024 / 1024) + " MB<br>";
-    html += "• Free Sketch Space: " + String(ESP.getFreeSketchSpace() / 1024) + " KB<br>";
-    html += "• Chip Model: " + String(ESP.getChipModel()) + "<br>";
-    html += "• Current Firmware: " + String(__DATE__) + " " + String(__TIME__);
-    html += "</div>";
-
-    html += "<form method='POST' action='/firmware' enctype='multipart/form-data'>";
-    html += "<h3>Select Firmware File (.bin)</h3>";
-    html += "<input type='file' name='firmware' accept='.bin' required>";
-    html += "<br><br>";
-    html += "<input type='submit' value='Upload Firmware'>";
-    html += "</form>";
-
-    html += "<br>";
-    html += "<a href='/' class='back-btn'>← Back to Main Page</a>";
-    html += "<a href='/upload' class='back-btn'>File Upload</a>";
-
-    html += "<script>";
-    html += "document.querySelector('form').addEventListener('submit', function(e) {";
-    html += "  if (!confirm('Are you sure you want to update the firmware? This will reboot the device.')) {";
-    html += "    e.preventDefault();";
-    html += "  } else {";
-    html += "    document.querySelector('input[type=\"submit\"]').value = 'Uploading...';";
-    html += "    document.querySelector('input[type=\"submit\"]').disabled = true;";
-    html += "  }";
-    html += "});";
-    html += "</script>";
-
-    html += "</div></body></html>";
-
-    server->send(200, "text/html", html);
-}
-
 void WebHandlers::handleDeleteFile()
 {
     String filename = server->arg("file");
 
     if (filename.length() == 0)
     {
-        server->send(400, "text/plain", "No filename provided");
+        server->send(400, "text/plain", "ERROR: No filename specified");
+        Serial.println("Delete request failed: No filename specified");
         return;
     }
 
-    // Prevent deletion of critical files
-    if (filename == "/index.html")
+    // Ensure filename starts with /
+    if (!filename.startsWith("/"))
     {
-        server->send(403, "text/plain", "Cannot delete index.html - critical system file");
+        filename = "/" + filename;
+    }
+
+    Serial.printf("Attempting to delete file: %s\n", filename.c_str());
+
+    // Check if file exists first
+    if (!SPIFFS.exists(filename))
+    {
+        String errorMsg = "ERROR: File '" + filename + "' not found in SPIFFS";
+        server->send(404, "text/plain", errorMsg);
+        Serial.println(errorMsg);
         return;
     }
 
-    if (SPIFFS.exists(filename))
+    // Attempt to delete the file
+    if (SPIFFS.remove(filename))
     {
-        if (SPIFFS.remove(filename))
-        {
-            Serial.printf("File deleted: %s\n", filename.c_str());
-            server->send(200, "text/plain", "File deleted successfully");
-        }
-        else
-        {
-            Serial.printf("Failed to delete file: %s\n", filename.c_str());
-            server->send(500, "text/plain", "Failed to delete file");
-        }
+        String successMsg = "SUCCESS: File '" + filename + "' deleted successfully";
+        server->send(200, "text/plain", successMsg);
+        Serial.println(successMsg);
     }
     else
     {
-        server->send(404, "text/plain", "File not found");
+        String errorMsg = "ERROR: Failed to delete file '" + filename + "'";
+        server->send(500, "text/plain", errorMsg);
+        Serial.println(errorMsg);
     }
+}
+
+void WebHandlers::handleListFiles()
+{
+    String json = "[";
+    bool first = true;
+
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+
+    while (file)
+    {
+        if (!first)
+        {
+            json += ",";
+        }
+
+        json += "{";
+        json += "\"name\":\"" + String(file.name()) + "\",";
+        json += "\"size\":" + String(file.size());
+        json += "}";
+
+        first = false;
+        file = root.openNextFile();
+    }
+
+    json += "]";
+    root.close();
+
+    server->send(200, "application/json", json);
 }
 
 void WebHandlers::handleUpload()
 {
-    String html = "<html><head><title>File Upload</title>";
+    String html = "<!DOCTYPE html><html><head><title>File Manager</title>";
+    html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += "<style>";
-    html += "body { font-family: Arial; text-align: center; margin: 20px; background-color: #f0f0f0; }";
-    html += ".container { max-width: 700px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }";
-    html += "input[type='file'] { margin: 10px; padding: 5px; }";
-    html += "input[type='submit'] { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }";
-    html += "input[type='submit']:hover { background-color: #218838; }";
-    html += ".firmware-btn { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px; }";
-    html += ".firmware-btn:hover { background-color: #0056b3; }";
-    html += ".back-btn { background-color: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px; }";
-    html += ".back-btn:hover { background-color: #545b62; }";
-    html += ".delete-btn { background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; margin-left: 10px; font-size: 12px; }";
-    html += ".delete-btn:hover { background-color: #c82333; }";
-    html += ".file-list { text-align: left; }";
-    html += ".file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin: 5px 0; background-color: #f8f9fa; border-radius: 5px; border: 1px solid #e9ecef; }";
-    html += ".file-info { flex-grow: 1; }";
-    html += ".warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px; }";
-    html += ".space-info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 14px; }";
-    html += "</style></head><body>";
-
+    html += "body { font-family: Arial; margin: 20px; background-color: #f5f5f5; }";
+    html += ".container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
+    html += "h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }";
+    html += ".upload-form { background: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px; }";
+    html += ".file-list { background: #fff; border: 1px solid #ddd; border-radius: 5px; }";
+    html += ".file-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }";
+    html += ".file-item:last-child { border-bottom: none; }";
+    html += ".file-name { font-weight: bold; color: #2c3e50; }";
+    html += ".file-size { color: #7f8c8d; font-size: 0.9em; }";
+    html += ".delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }";
+    html += ".delete-btn:hover { background: #c0392b; }";
+    html += "input[type='file'] { margin: 10px 0; }";
+    html += "input[type='submit'] { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }";
+    html += "input[type='submit']:hover { background: #2980b9; }";
+    html += ".refresh-btn { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }";
+    html += ".refresh-btn:hover { background: #229954; }";
+    html += "</style>";
+    html += "<script>";
+    html += "function deleteFile(filename) {";
+    html += "  if(confirm('Are you sure you want to delete ' + filename + '?')) {";
+    html += "    fetch('/delete?file=' + encodeURIComponent(filename), { method: 'POST' })";
+    html += "    .then(response => response.text())";
+    html += "    .then(data => { alert(data); location.reload(); })";
+    html += "    .catch(error => { alert('Error: ' + error); });";
+    html += "  }";
+    html += "}";
+    html += "function refreshFiles() { location.reload(); }";
+    html += "</script>";
+    html += "</head><body>";
     html += "<div class='container'>";
-    html += "<h2>File Management</h2>";
+    html += "<h2>ESP32 File Manager</h2>";
 
-    // SPIFFS space information
-    size_t totalBytes = SPIFFS.totalBytes();
-    size_t usedBytes = SPIFFS.usedBytes();
-    size_t freeBytes = totalBytes - usedBytes;
-
-    html += "<div class='space-info'>";
-    html += "<strong> SPIFFS Storage:</strong><br>";
-    html += "Total: " + String(totalBytes / 1024) + " KB | ";
-    html += "Used: " + String(usedBytes / 1024) + " KB | ";
-    html += "Free: " + String(freeBytes / 1024) + " KB";
-    html += "</div>";
-
-    html += "<div class='warning'>";
-    html += "<strong> Note:</strong> For firmware updates, use the dedicated firmware update page. ";
-    html += "Don't upload .bin files here as they waste SPIFFS space.";
-    html += "</div>";
-
-    html += "<h3>Upload File to SPIFFS</h3>";
+    html += "<div class='upload-form'>";
+    html += "<h3>Upload New File</h3>";
     html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
     html += "<input type='file' name='upload' required>";
-    html += "<br><br>";
     html += "<input type='submit' value='Upload File'>";
     html += "</form>";
+    html += "</div>";
 
-    html += "<br>";
-    html += "<a href='/firmware' class='firmware-btn'> Update Firmware</a>";
-    html += "<a href='/' class='back-btn'>← Back to Main Page</a>";
-
+    html += "<button class='refresh-btn' onclick='refreshFiles()'>Refresh File List</button>";
     html += "<h3>Current Files in SPIFFS:</h3>";
     html += "<div class='file-list'>";
 
@@ -352,24 +252,11 @@ void WebHandlers::handleUpload()
         size_t fileSize = file.size();
 
         html += "<div class='file-item'>";
-        html += "<div class='file-info'>";
-        html += "<strong>" + fileName + "</strong><br>";
-        html += "Size: " + String(fileSize) + " bytes";
-        if (fileName.endsWith(".bin"))
-        {
-            html += " <span style='color: #dc3545;'>(Firmware file - consider deleting)</span>";
-        }
+        html += "<div>";
+        html += "<span class='file-name'>" + fileName + "</span><br>";
+        html += "<span class='file-size'>" + String(fileSize) + " bytes</span>";
         html += "</div>";
-
-        // Don't allow deletion of index.html
-        if (fileName != "/index.html")
-        {
-            html += "<button class='delete-btn' onclick='deleteFile(\"" + fileName + "\")'>Delete</button>";
-        }
-        else
-        {
-            html += "<span style='color: #6c757d; font-size: 12px;'>Protected</span>";
-        }
+        html += "<button class='delete-btn' onclick='deleteFile(\"" + fileName + "\")'>Delete</button>";
         html += "</div>";
 
         file = root.openNextFile();
@@ -377,28 +264,13 @@ void WebHandlers::handleUpload()
 
     if (!hasFiles)
     {
-        html += "<div class='file-item'><div class='file-info'>No files found in SPIFFS</div></div>";
+        html += "<div class='file-item'>No files found in SPIFFS</div>";
     }
 
     html += "</div>";
-
-    html += "<script>";
-    html += "function deleteFile(filename) {";
-    html += "  if (confirm('Are you sure you want to delete ' + filename + '?')) {";
-    html += "    fetch('/delete?file=' + encodeURIComponent(filename), { method: 'POST' })";
-    html += "      .then(response => response.text())";
-    html += "      .then(data => {";
-    html += "        alert(data);";
-    html += "        location.reload();";
-    html += "      })";
-    html += "      .catch(error => {";
-    html += "        alert('Error deleting file: ' + error);";
-    html += "      });";
-    html += "  }";
-    html += "}";
-    html += "</script>";
-
-    html += "</div></body></html>";
+    html += "<br><a href='/'>← Back to Main Page</a>";
+    html += "</div>";
+    html += "</body></html>";
 
     server->send(200, "text/html", html);
 }
@@ -416,16 +288,10 @@ void WebHandlers::setupRoutes()
     server->on("/upload", HTTP_GET, [this]()
                { this->handleUpload(); });
     server->on("/upload", HTTP_POST, [this]()
-               { server->send(200, "text/plain", "Upload complete"); }, [this]()
+               { server->send(200, "text/plain", "Upload complete - <a href='/upload'>Back to File Manager</a>"); }, [this]()
                { this->handleFileUpload(); });
-    server->on("/firmware", HTTP_GET, [this]()
-               { this->handleFirmwareUpdate(); });
-    server->on("/firmware", HTTP_POST, [this]()
-               { 
-                   server->send(200, "text/plain", "Firmware update complete. Device will reboot in 3 seconds...");
-                   delay(3000);
-                   ESP.restart(); }, [this]()
-               { this->handleFirmwareUpload(); });
     server->on("/delete", HTTP_POST, [this]()
                { this->handleDeleteFile(); });
+    server->on("/files", HTTP_GET, [this]()
+               { this->handleListFiles(); });
 }

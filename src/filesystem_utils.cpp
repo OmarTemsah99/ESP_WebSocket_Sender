@@ -80,3 +80,78 @@ void FilesystemUtils::printFileInfo(const String &filename)
         Serial.printf("File %s not found\n", filename.c_str());
     }
 }
+
+bool FilesystemUtils::deleteFile(const String &filename)
+{
+    String fullPath = filename;
+    if (!fullPath.startsWith("/"))
+    {
+        fullPath = "/" + fullPath;
+    }
+
+    Serial.printf("Attempting to delete file: %s\n", fullPath.c_str());
+
+    if (!SPIFFS.exists(fullPath))
+    {
+        Serial.printf("File %s not found\n", fullPath.c_str());
+        return false;
+    }
+
+    if (SPIFFS.remove(fullPath))
+    {
+        Serial.printf("File %s deleted successfully\n", fullPath.c_str());
+        return true;
+    }
+    else
+    {
+        Serial.printf("Failed to delete file %s\n", fullPath.c_str());
+        return false;
+    }
+}
+
+bool FilesystemUtils::fileExists(const String &filename)
+{
+    String fullPath = filename;
+    if (!fullPath.startsWith("/"))
+    {
+        fullPath = "/" + fullPath;
+    }
+    return SPIFFS.exists(fullPath);
+}
+
+size_t FilesystemUtils::getFileSize(const String &filename)
+{
+    String fullPath = filename;
+    if (!fullPath.startsWith("/"))
+    {
+        fullPath = "/" + fullPath;
+    }
+
+    if (!SPIFFS.exists(fullPath))
+    {
+        return 0;
+    }
+
+    File file = SPIFFS.open(fullPath, "r");
+    if (!file)
+    {
+        return 0;
+    }
+
+    size_t size = file.size();
+    file.close();
+    return size;
+}
+
+void FilesystemUtils::formatSPIFFS()
+{
+    Serial.println("Formatting SPIFFS...");
+    if (SPIFFS.format())
+    {
+        Serial.println("SPIFFS formatted successfully");
+    }
+    else
+    {
+        Serial.println("SPIFFS format failed");
+    }
+}
