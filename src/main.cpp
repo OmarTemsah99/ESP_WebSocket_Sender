@@ -5,6 +5,7 @@
 #include <ESPmDNS.h>
 #include <WiFiUDP.h>
 #include <ArduinoOTA.h>
+#include <SPIFFS.h>
 #include <map>
 #include <string>
 
@@ -62,77 +63,60 @@ struct SensorData
 };
 std::map<String, SensorData> sensorDataMap; // Key is IP address
 
-// HTML page
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-    <title>ESP32 Sensor Monitor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { 
-            font-family: Arial; 
-            text-align: center; 
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .sensor-data {
-            margin: 20px auto;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            background-color: white;
-            max-width: 600px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .sensor {
-            margin: 15px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        h2 {
-            color: #34495e;
-        }
-    </style>
-</head>
-<body>
-    <h1>ESP32 Sensor Monitor</h1>
-    <div class="sensor-data">
-        <h2>Sensor Data</h2>
-        <div id="sensorList"></div>
-    </div>
-    <script>
-        function updateSensorData() {
-            fetch('/sensorData')
-                .then(response => response.json())
-                .then(data => {
-                    const sensorList = document.getElementById('sensorList');
-                    sensorList.innerHTML = '';
-                    for (const [ip, sensorInfo] of Object.entries(data)) {
-                        const sensorDiv = document.createElement('div');
-                        sensorDiv.className = 'sensor';
-                        sensorDiv.innerHTML = `
-                            <strong>Client ID: ${sensorInfo.clientId}</strong><br>
-                            IP Address: ${ip}<br>
-                            Sensor Value: ${sensorInfo.value}
-                        `;
-                        sensorList.appendChild(sensorDiv);
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-        }
+// Handle root path
+void handleRoot()
+{
+  if (!SPIFFS.exists("/index.html"))
+  {
+    Serial.println("Error: index.html not found in SPIFFS");
+    server.send(500, "text/plain", "File not found in SPIFFS");
+    return;
+  }
 
-        // Update sensor data every 50ms for more responsive updates
-        setInterval(updateSensorData, 50);
-    </script>
-</body>
-</html>
-)rawliteral";
+  File file = SPIFFS.open("/index.html", "r");
+  if (!file)
+  {
+    Serial.println("Error: Failed to open index.html");
+    server.send(500, "text/plain", "Failed to open file");
+    return;
+  }
+
+  size_t fileSize = file.size();
+  Serial.printf("File size: %d bytes\n", fileSize);
+
+  if (fileSize == 0)
+  {
+    Serial.println("Error: index.html is empty");
+    server.send(500, "text/plain", "File is empty");
+    file.close();
+    return;
+  }
+
+  server.sendHeader("Content-Length", String(fileSize));
+  server.setContentLength(fileSize);
+  server.send(200, "text/html", ""); // Send header first
+
+  // Send file in chunks
+  const size_t bufSize = 1024;
+  uint8_t buf[bufSize];
+  size_t totalSent = 0;
+
+  while (totalSent < fileSize)
+  {
+    size_t toRead = min(bufSize, fileSize - totalSent);
+    size_t bytesRead = file.read(buf, toRead);
+    if (bytesRead == 0)
+    {
+      Serial.println("Error: Failed to read file");
+      break;
+    }
+    server.sendContent((char *)buf, bytesRead);
+    totalSent += bytesRead;
+  }
+
+  file.close();
+  Serial.printf("File sent successfully. Total bytes: %d\n", totalSent);
+}
 
 // Handle sensor data submission
 void handleSensorData()
@@ -183,11 +167,6 @@ void handleGetSensorData()
   server.send(200, "application/json", json);
 }
 
-void handleRoot()
-{
-  server.send(200, "text/html", index_html);
-}
-
 void handleColor()
 {
   currentRed = server.arg("r").toInt();
@@ -202,7 +181,60 @@ void handleColor()
 
 void setup()
 {
-  // Initialize NeoPixel first for immediate visual feedback
+  // Initialize Serial first for debugging
+  Serial.begin(115200);
+  Serial.println("\n\nESP32-S3 NeoPixel Web Server Starting...");
+
+  // Initialize SPIFFS with detailed logging
+  if (!SPIFFS.begin(true))
+  {
+    Serial.println("SPIFFS Mount Failed. Trying to format...");
+    if (!SPIFFS.format())
+    {
+      Serial.println("SPIFFS Format Failed");
+      return;
+    }
+    if (!SPIFFS.begin())
+    {
+      Serial.println("SPIFFS Mount Failed after formatting");
+      return;
+    }
+  }
+  Serial.println("SPIFFS mounted successfully");
+
+  // List all files in SPIFFS
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  Serial.println("\nFiles in SPIFFS:");
+  while (file)
+  {
+    String fileName = file.name();
+    size_t fileSize = file.size();
+    Serial.printf("- File: %s, Size: %d bytes\n", fileName.c_str(), fileSize);
+    file = root.openNextFile();
+  }
+  root.close();
+
+  // Try to open index.html specifically
+  if (SPIFFS.exists("/index.html"))
+  {
+    File indexFile = SPIFFS.open("/index.html", "r");
+    if (indexFile)
+    {
+      Serial.printf("index.html found, size: %d bytes\n", indexFile.size());
+      indexFile.close();
+    }
+    else
+    {
+      Serial.println("index.html exists but cannot be opened");
+    }
+  }
+  else
+  {
+    Serial.println("index.html not found in SPIFFS");
+  }
+
+  // Initialize NeoPixel
   pixel.begin();
   pixel.setBrightness(128);
   setDisconnectedIndicator();
@@ -211,7 +243,14 @@ void setup()
   Serial.begin(115200);
   Serial.println("\n\nESP32-S3 NeoPixel Web Server Starting...");
   Serial.println("NeoPixel Initialized");
-  Serial.flush();
+
+  // Initialize SPIFFS
+  if (!SPIFFS.begin(true))
+  {
+    Serial.println("An error occurred while mounting SPIFFS");
+    return;
+  }
+  Serial.println("SPIFFS mounted successfully");
 
   // Set WiFi mode to station (client)
   WiFi.mode(WIFI_STA);
@@ -226,7 +265,6 @@ void setup()
   {
     Serial.println("Static IP Configuration Successful");
   }
-  Serial.flush();
 
   // Connect to WiFi
   Serial.printf("Connecting to WiFi: %s\n", ssid);
@@ -241,7 +279,6 @@ void setup()
     setConnectingIndicator(); // Blink blue while connecting
     delay(500);
     Serial.print(".");
-    Serial.flush();
     connectionAttempts++;
   }
   Serial.println();
@@ -256,10 +293,9 @@ void setup()
     Serial.println(" dBm");
 
     // Setup web server routes
-    server.on("/", handleRoot);
-    server.on("/color", handleColor);
+    server.on("/", HTTP_GET, handleRoot);
     server.on("/sensor", HTTP_POST, handleSensorData);
-    server.on("/sensorData", HTTP_GET, handleGetSensorData); // Start web server
+    server.on("/sensorData", HTTP_GET, handleGetSensorData);
     server.begin();
     Serial.println("HTTP server started");
 
@@ -270,9 +306,12 @@ void setup()
     ArduinoOTA.onStart([]()
                        {
       String type;
-      if (ArduinoOTA.getCommand() == U_FLASH) {
+      if (ArduinoOTA.getCommand() == U_FLASH)
+      {
         type = "sketch";
-      } else {
+      }
+      else
+      {
         type = "filesystem";
       }
       Serial.println("Start updating " + type); });
@@ -286,11 +325,16 @@ void setup()
     ArduinoOTA.onError([](ota_error_t error)
                        {
       Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed"); });
+      if (error == OTA_AUTH_ERROR)
+        Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR)
+        Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR)
+        Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR)
+        Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR)
+        Serial.println("End Failed"); });
 
     ArduinoOTA.begin();
     Serial.println("OTA Ready");
@@ -324,7 +368,6 @@ void setup()
       Serial.println("Unknown status");
     }
   }
-  Serial.flush();
 }
 
 void loop()
