@@ -26,20 +26,79 @@
         border-radius: 8px;
         border: 1px solid #e9ecef;
       }
+      .controls {
+        margin: 20px auto;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        background-color: white;
+        max-width: 600px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .btn {
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        margin: 5px;
+        font-size: 14px;
+      }
+      .btn:hover {
+        background-color: #0056b3;
+      }
+      .btn-firmware {
+        background-color: #dc3545;
+      }
+      .btn-firmware:hover {
+        background-color: #c82333;
+      }
+      .btn-upload {
+        background-color: #28a745;
+      }
+      .btn-upload:hover {
+        background-color: #218838;
+      }
       h1 {
         color: #2c3e50;
       }
       h2 {
         color: #34495e;
       }
+      .info {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
     <h1>ESP32 Sensor Monitor</h1>
+
     <div class="sensor-data">
       <h2>Sensor Data</h2>
       <div id="sensorList"></div>
     </div>
+
+    <div class="controls">
+      <h2>Device Management</h2>
+      <div class="info">
+        <strong>Available Functions:</strong><br />
+        Upload files to SPIFFS filesystem<br />
+        Update device firmware (.bin files)<br />
+        Monitor connected sensors in real-time
+      </div>
+      <a href="/upload" class="btn btn-upload">File Upload</a>
+      <a href="/firmware" class="btn btn-firmware">Firmware Update</a>
+    </div>
+
     <script>
       function updateSensorData() {
         fetch("/sensorData")
@@ -47,6 +106,14 @@
           .then((data) => {
             const sensorList = document.getElementById("sensorList");
             sensorList.innerHTML = "";
+
+            const sensorCount = Object.keys(data).length;
+            if (sensorCount === 0) {
+              sensorList.innerHTML =
+                '<div class="sensor">No sensor data available</div>';
+              return;
+            }
+
             for (const [ip, sensorInfo] of Object.entries(data)) {
               const sensorDiv = document.createElement("div");
               sensorDiv.className = "sensor";
@@ -58,11 +125,19 @@
               sensorList.appendChild(sensorDiv);
             }
           })
-          .catch((error) => console.error("Error:", error));
+          .catch((error) => {
+            console.error("Error:", error);
+            const sensorList = document.getElementById("sensorList");
+            sensorList.innerHTML =
+              '<div class="sensor">Error loading sensor data</div>';
+          });
       }
 
       // Update sensor data every 50ms for more responsive updates
       setInterval(updateSensorData, 50);
+
+      // Initial load
+      updateSensorData();
     </script>
   </body>
 </html>
