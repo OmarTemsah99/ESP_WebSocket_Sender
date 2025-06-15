@@ -26,6 +26,8 @@ public:
     void handleUpload();
     void handleDeleteFile();
     void handleListFiles();
+    void handleFirmware();
+    void handleFirmwareUpdate();
     void setupRoutes();
 };
 
