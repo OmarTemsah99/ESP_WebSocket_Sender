@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Firmware Update</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      function updateFromFile(filename) {
+        if (
+          confirm(
+            "WARNING: This will update the firmware and restart the device. Continue?"
+          )
+        ) {
+          document.getElementById("uploadStatus").innerHTML =
+            "Starting firmware update...";
+          document.getElementById("uploadStatus").style.color = "orange";
+
+          fetch("/firmwareUpdate?file=" + encodeURIComponent(filename), {
+            method: "POST",
+          })
+            .then((response) => response.text())
+            .then((data) => {
+              document.getElementById("uploadStatus").innerHTML = data;
+              if (data.includes("SUCCESS")) {
+                document.getElementById("uploadStatus").style.color = "green";
+                setTimeout(() => {
+                  alert(
+                    "Device will restart now. Please reconnect after 30 seconds."
+                  );
+                }, 2000);
+              } else {
+                document.getElementById("uploadStatus").style.color = "red";
+              }
+            })
+            .catch((error) => {
+              document.getElementById("uploadStatus").innerHTML =
+                "Error: " + error;
+              document.getElementById("uploadStatus").style.color = "red";
+            });
+        }
+      }
+
+      function refreshFiles() {
+        location.reload();
+      }
+
+      function loadFirmwareFiles() {
+        fetch("/list")
+          .then((response) => response.json())
+          .then((files) => {
+            const firmwareList = document.getElementById("firmwareList");
+            firmwareList.innerHTML = "";
+
+            const binFiles = files.filter((file) => file.name.endsWith(".bin"));
+
+            if (binFiles.length === 0) {
+              firmwareList.innerHTML =
+                '<div class="file-item">No .bin firmware files found. Upload a firmware file first.</div>';
+              return;
+            }
+
+            binFiles.forEach((file) => {
+              const fileItem = document.createElement("div");
+              fileItem.className = "file-item";
+              fileItem.innerHTML = `
+                        <div>
+                            <span class="file-name">${file.name}</span><br>
+                            <span class="file-size">${file.size} bytes</span>
+                        </div>
+                        <button class="update-btn" onclick="updateFromFile('${file.name}')">Update Firmware</button>
+                    `;
+              firmwareList.appendChild(fileItem);
+            });
+          })
+          .catch((error) => {
+            console.error("Error loading firmware files:", error);
+            document.getElementById("firmwareList").innerHTML =
+              '<div class="file-item">Error loading firmware files</div>';
+          });
+      }
+
+      // Load firmware files when page loads
+      window.addEventListener("load", loadFirmwareFiles);
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Firmware Update</h2>
+
+      <div class="warning">
+        <strong>WARNING:</strong><br />
+        Firmware updates can brick your device if interrupted<br />
+        Ensure stable power supply during update<br />
+        Only use firmware files specifically for ESP32-S3<br />
+        Device will restart automatically after update<br />
+        Have your WiFi credentials ready for reconnection
+      </div>
+
+      <div class="firmware-form">
+        <h3>Upload New Firmware</h3>
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+          <input type="file" name="upload" accept=".bin" required />
+          <input type="submit" value="Upload Firmware (.bin)" />
+        </form>
+        <div id="uploadStatus"></div>
+      </div>
+
+      <button class="refresh-btn" onclick="refreshFiles()">
+        Refresh File List
+      </button>
+
+      <h3>Available Firmware Files (.bin):</h3>
+      <div class="file-list">
+        <div id="firmwareList">Loading firmware files...</div>
+      </div>
+
+      <a href="/" class="back-btn">Back to Main Page</a>
+    </div>
+  </body>
+</html>

@@ -209,94 +209,31 @@ void WebHandlers::handleListFiles()
 
 void WebHandlers::handleFirmware()
 {
-    String html = "<!DOCTYPE html><html><head><title>Firmware Update</title>";
-    html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-    // Link to external stylesheet
-    html += "<link rel='stylesheet' href='/styles.css'>";
-    html += "<script>";
-    html += "function updateFromFile(filename) {";
-    html += "  if(confirm('WARNING: This will update the firmware and restart the device. Continue?')) {";
-    html += "    document.getElementById('uploadStatus').innerHTML = 'Starting firmware update...';";
-    html += "    document.getElementById('uploadStatus').style.color = 'orange';";
-    html += "    fetch('/firmwareUpdate?file=' + encodeURIComponent(filename), { method: 'POST' })";
-    html += "    .then(response => response.text())";
-    html += "    .then(data => {";
-    html += "      document.getElementById('uploadStatus').innerHTML = data;";
-    html += "      if(data.includes('SUCCESS')) {";
-    html += "        document.getElementById('uploadStatus').style.color = 'green';";
-    html += "        setTimeout(() => { alert('Device will restart now. Please reconnect after 30 seconds.'); }, 2000);";
-    html += "      } else {";
-    html += "        document.getElementById('uploadStatus').style.color = 'red';";
-    html += "      }";
-    html += "    })";
-    html += "    .catch(error => {";
-    html += "      document.getElementById('uploadStatus').innerHTML = 'Error: ' + error;";
-    html += "      document.getElementById('uploadStatus').style.color = 'red';";
-    html += "    });";
-    html += "  }";
-    html += "}";
-    html += "function refreshFiles() { location.reload(); }";
-    html += "</script>";
-    html += "</head><body>";
-    html += "<div class='container'>";
-    html += "<h2>Firmware Update</h2>";
-
-    html += "<div class='warning'>";
-    html += "<strong>WARNING:</strong><br>";
-    html += "Firmware updates can brick your device if interrupted<br>";
-    html += "Ensure stable power supply during update<br>";
-    html += "Only use firmware files specifically for ESP32-S3<br>";
-    html += "Device will restart automatically after update<br>";
-    html += "Have your WiFi credentials ready for reconnection";
-    html += "</div>";
-
-    html += "<div class='firmware-form'>";
-    html += "<h3>Upload New Firmware</h3>";
-    html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
-    html += "<input type='file' name='upload' accept='.bin' required>";
-    html += "<input type='submit' value='Upload Firmware (.bin)'>";
-    html += "</form>";
-    html += "<div id='uploadStatus'></div>";
-    html += "</div>";
-
-    html += "<button class='refresh-btn' onclick='refreshFiles()'>Refresh File List</button>";
-    html += "<h3>Available Firmware Files (.bin):</h3>";
-    html += "<div class='file-list'>";
-
-    File root = SPIFFS.open("/");
-    File file = root.openNextFile();
-    bool hasBinFiles = false;
-
-    while (file)
+    if (!SPIFFS.exists("/firmware_update.html"))
     {
-        String fileName = file.name();
-        if (fileName.endsWith(".bin"))
-        {
-            hasBinFiles = true;
-            size_t fileSize = file.size();
-
-            html += "<div class='file-item'>";
-            html += "<div>";
-            html += "<span class='file-name'>" + fileName + "</span><br>";
-            html += "<span class='file-size'>" + String(fileSize) + " bytes</span>";
-            html += "</div>";
-            html += "<button class='update-btn' onclick='updateFromFile(\"" + fileName + "\")'>Update Firmware</button>";
-            html += "</div>";
-        }
-        file = root.openNextFile();
+        Serial.println("Error: firmware_update.html not found in SPIFFS");
+        server->send(500, "text/plain", "firmware_update.html not found in SPIFFS");
+        return;
     }
 
-    if (!hasBinFiles)
+    File file = SPIFFS.open("/firmware_update.html", "r");
+    if (!file)
     {
-        html += "<div class='file-item'>No .bin firmware files found. Upload a firmware file first.</div>";
+        Serial.println("Error: Failed to open firmware_update.html");
+        server->send(500, "text/plain", "Failed to open firmware_update.html");
+        return;
     }
 
-    html += "</div>";
-    html += "<a href='/' class='back-btn'>Back to Main Page</a>";
-    html += "</div>";
-    html += "</body></html>";
+    if (file.size() == 0)
+    {
+        Serial.println("Error: firmware_update.html is empty");
+        server->send(500, "text/plain", "firmware_update.html is empty");
+        file.close();
+        return;
+    }
 
-    server->send(200, "text/html", html);
+    sendFileInChunks(file, "/firmware_update.html");
+    file.close();
 }
 
 void WebHandlers::handleFirmwareUpdate()
@@ -390,69 +327,31 @@ void WebHandlers::handleFirmwareUpdate()
 
 void WebHandlers::handleUpload()
 {
-    String html = "<!DOCTYPE html><html><head><title>File Manager</title>";
-    html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-    // Link to external stylesheet
-    html += "<link rel='stylesheet' href='/styles.css'>";
-    html += "<script>";
-    html += "function deleteFile(filename) {";
-    html += "  if(confirm('Are you sure you want to delete ' + filename + '?')) {";
-    html += "    fetch('/delete?file=' + encodeURIComponent(filename), { method: 'POST' })";
-    html += "    .then(response => response.text())";
-    html += "    .then(data => { alert(data); location.reload(); })";
-    html += "    .catch(error => { alert('Error: ' + error); });";
-    html += "  }";
-    html += "}";
-    html += "function refreshFiles() { location.reload(); }";
-    html += "</script>";
-    html += "</head><body>";
-    html += "<div class='container'>";
-    html += "<h2>ESP32 File Manager</h2>";
-
-    html += "<div class='upload-form'>";
-    html += "<h3>Upload New File</h3>";
-    html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
-    html += "<input type='file' name='upload' required>";
-    html += "<input type='submit' value='Upload File'>";
-    html += "</form>";
-    html += "</div>";
-
-    html += "<button class='refresh-btn' onclick='refreshFiles()'>Refresh File List</button>";
-    html += "<h3>Current Files in SPIFFS:</h3>";
-    html += "<div class='file-list'>";
-
-    File root = SPIFFS.open("/");
-    File file = root.openNextFile();
-    bool hasFiles = false;
-
-    while (file)
+    if (!SPIFFS.exists("/file_manager.html"))
     {
-        hasFiles = true;
-        String fileName = file.name();
-        size_t fileSize = file.size();
-
-        html += "<div class='file-item'>";
-        html += "<div>";
-        html += "<span class='file-name'>" + fileName + "</span><br>";
-        html += "<span class='file-size'>" + String(fileSize) + " bytes</span>";
-        html += "</div>";
-        html += "<button class='delete-btn' onclick='deleteFile(\"" + fileName + "\")'>Delete</button>";
-        html += "</div>";
-
-        file = root.openNextFile();
+        Serial.println("Error: file_manager.html not found in SPIFFS");
+        server->send(500, "text/plain", "file_manager.html not found in SPIFFS");
+        return;
     }
 
-    if (!hasFiles)
+    File file = SPIFFS.open("/file_manager.html", "r");
+    if (!file)
     {
-        html += "<div class='file-item'>No files found in SPIFFS</div>";
+        Serial.println("Error: Failed to open file_manager.html");
+        server->send(500, "text/plain", "Failed to open file_manager.html");
+        return;
     }
 
-    html += "</div>";
-    html += "<br><a href='/'>Back to Main Page</a>";
-    html += "</div>";
-    html += "</body></html>";
+    if (file.size() == 0)
+    {
+        Serial.println("Error: file_manager.html is empty");
+        server->send(500, "text/plain", "file_manager.html is empty");
+        file.close();
+        return;
+    }
 
-    server->send(200, "text/html", html);
+    sendFileInChunks(file, "/file_manager.html");
+    file.close();
 }
 
 void WebHandlers::handleStaticFile()

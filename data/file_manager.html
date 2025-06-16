@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>File Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      function deleteFile(filename) {
+        if (confirm("Are you sure you want to delete " + filename + "?")) {
+          fetch("/delete?file=" + encodeURIComponent(filename), {
+            method: "POST",
+          })
+            .then((response) => response.text())
+            .then((data) => {
+              alert(data);
+              location.reload();
+            })
+            .catch((error) => {
+              alert("Error: " + error);
+            });
+        }
+      }
+
+      function refreshFiles() {
+        location.reload();
+      }
+
+      function loadFileList() {
+        fetch("/list")
+          .then((response) => response.json())
+          .then((files) => {
+            const fileList = document.getElementById("fileList");
+            fileList.innerHTML = "";
+
+            if (files.length === 0) {
+              fileList.innerHTML =
+                '<div class="file-item">No files found in SPIFFS</div>';
+              return;
+            }
+
+            files.forEach((file) => {
+              const fileItem = document.createElement("div");
+              fileItem.className = "file-item";
+              fileItem.innerHTML = `
+                        <div>
+                            <span class="file-name">${file.name}</span><br>
+                            <span class="file-size">${file.size} bytes</span>
+                        </div>
+                        <button class="delete-btn" onclick="deleteFile('${file.name}')">Delete</button>
+                    `;
+              fileList.appendChild(fileItem);
+            });
+          })
+          .catch((error) => {
+            console.error("Error loading file list:", error);
+            document.getElementById("fileList").innerHTML =
+              '<div class="file-item">Error loading file list</div>';
+          });
+      }
+
+      // Load file list when page loads
+      window.addEventListener("load", loadFileList);
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <h2>ESP32 File Manager</h2>
+
+      <div class="upload-form">
+        <h3>Upload New File</h3>
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+          <input type="file" name="upload" required />
+          <input type="submit" value="Upload File" />
+        </form>
+      </div>
+
+      <button class="refresh-btn" onclick="refreshFiles()">
+        Refresh File List
+      </button>
+
+      <h3>Current Files in SPIFFS:</h3>
+      <div class="file-list">
+        <div id="fileList">Loading files...</div>
+      </div>
+
+      <br />
+      <a href="/" class="back-btn">Back to Main Page</a>
+    </div>
+  </body>
+</html>
