@@ -13,7 +13,9 @@ private:
     SensorManager *sensorManager;
     LEDController *ledController;
 
-    void sendFileInChunks(File &file);
+    String getContentType(String filename);
+    void sendFileInChunks(File &file, String filename);
+    void handleStaticFile();
 
 public:
     WebHandlers(WebServer *webServer, SensorManager *sensorMgr, LEDController *ledCtrl);

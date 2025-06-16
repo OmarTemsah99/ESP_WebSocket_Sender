@@ -6,12 +6,26 @@ WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr, LEDCont
 {
 }
 
-void WebHandlers::sendFileInChunks(File &file)
+String WebHandlers::getContentType(String filename)
+{
+    if (filename.endsWith(".html"))
+        return "text/html";
+    if (filename.endsWith(".css"))
+        return "text/css";
+    if (filename.endsWith(".js"))
+        return "application/javascript";
+    if (filename.endsWith(".json"))
+        return "application/json";
+    return "text/plain";
+}
+
+void WebHandlers::sendFileInChunks(File &file, String filename)
 {
     size_t fileSize = file.size();
+    String contentType = getContentType(filename);
     server->sendHeader("Content-Length", String(fileSize));
     server->setContentLength(fileSize);
-    server->send(200, "text/html", "");
+    server->send(200, contentType, "");
 
     const size_t bufSize = 1024;
     uint8_t buf[bufSize];
@@ -58,7 +72,7 @@ void WebHandlers::handleRoot()
         return;
     }
 
-    sendFileInChunks(file);
+    sendFileInChunks(file, "/index.html");
     file.close();
 }
 
@@ -197,30 +211,8 @@ void WebHandlers::handleFirmware()
 {
     String html = "<!DOCTYPE html><html><head><title>Firmware Update</title>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += "<style>";
-    html += "body { font-family: Arial; margin: 20px; background-color: #f5f5f5; }";
-    html += ".container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
-    html += "h2 { color: #2c3e50; border-bottom: 2px solid #dc3545; padding-bottom: 10px; }";
-    html += ".warning { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #f5c6cb; }";
-    html += ".firmware-form { background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeaa7; }";
-    html += ".file-list { background: #fff; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 20px; }";
-    html += ".file-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }";
-    html += ".file-item:last-child { border-bottom: none; }";
-    html += ".file-name { font-weight: bold; color: #2c3e50; }";
-    html += ".file-size { color: #7f8c8d; font-size: 0.9em; }";
-    html += ".update-btn { background: #dc3545; color: white; border: none; padding: 5px 15px; border-radius: 3px; cursor: pointer; }";
-    html += ".update-btn:hover { background: #c82333; }";
-    html += "input[type='file'] { margin: 10px 0; width: 100%; }";
-    html += "input[type='submit'] { background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }";
-    html += "input[type='submit']:hover { background: #c82333; }";
-    html += ".refresh-btn { background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }";
-    html += ".refresh-btn:hover { background: #5a6268; }";
-    html += ".back-btn { background: #28a745; color: white; text-decoration: none; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 20px; }";
-    html += ".back-btn:hover { background: #218838; }";
-    html += ".progress { width: 100%; background-color: #f0f0f0; border-radius: 5px; margin: 10px 0; }";
-    html += ".progress-bar { height: 20px; background-color: #28a745; border-radius: 5px; width: 0%; transition: width 0.3s; }";
-    html += "#uploadStatus { margin: 10px 0; font-weight: bold; }";
-    html += "</style>";
+    // Link to external stylesheet
+    html += "<link rel='stylesheet' href='/styles.css'>";
     html += "<script>";
     html += "function updateFromFile(filename) {";
     html += "  if(confirm('WARNING: This will update the firmware and restart the device. Continue?')) {";
@@ -350,6 +342,7 @@ void WebHandlers::handleFirmwareUpdate()
         String errorMsg = "ERROR: Cannot open firmware file '" + filename + "'";
         server->send(500, "text/plain", errorMsg);
         Serial.println(errorMsg);
+        firmwareFile.close();
         return;
     }
 
@@ -399,24 +392,8 @@ void WebHandlers::handleUpload()
 {
     String html = "<!DOCTYPE html><html><head><title>File Manager</title>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += "<style>";
-    html += "body { font-family: Arial; margin: 20px; background-color: #f5f5f5; }";
-    html += ".container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
-    html += "h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }";
-    html += ".upload-form { background: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px; }";
-    html += ".file-list { background: #fff; border: 1px solid #ddd; border-radius: 5px; }";
-    html += ".file-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }";
-    html += ".file-item:last-child { border-bottom: none; }";
-    html += ".file-name { font-weight: bold; color: #2c3e50; }";
-    html += ".file-size { color: #7f8c8d; font-size: 0.9em; }";
-    html += ".delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }";
-    html += ".delete-btn:hover { background: #c0392b; }";
-    html += "input[type='file'] { margin: 10px 0; }";
-    html += "input[type='submit'] { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }";
-    html += "input[type='submit']:hover { background: #2980b9; }";
-    html += ".refresh-btn { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }";
-    html += ".refresh-btn:hover { background: #229954; }";
-    html += "</style>";
+    // Link to external stylesheet
+    html += "<link rel='stylesheet' href='/styles.css'>";
     html += "<script>";
     html += "function deleteFile(filename) {";
     html += "  if(confirm('Are you sure you want to delete ' + filename + '?')) {";
@@ -478,6 +455,30 @@ void WebHandlers::handleUpload()
     server->send(200, "text/html", html);
 }
 
+void WebHandlers::handleStaticFile()
+{
+    String path = server->uri();
+    Serial.printf("Handling static file request: %s\n", path.c_str());
+
+    if (!SPIFFS.exists(path))
+    {
+        Serial.printf("File %s not found\n", path.c_str());
+        server->send(404, "text/plain", "File not found");
+        return;
+    }
+
+    File file = SPIFFS.open(path, "r");
+    if (!file)
+    {
+        Serial.printf("Failed to open file: %s\n", path.c_str());
+        server->send(500, "text/plain", "Failed to open file");
+        return;
+    }
+
+    sendFileInChunks(file, path);
+    file.close();
+}
+
 void WebHandlers::setupRoutes()
 {
     server->on("/", HTTP_GET, [this]()
@@ -490,15 +491,27 @@ void WebHandlers::setupRoutes()
                { this->handleColor(); });
     server->on("/upload", HTTP_GET, [this]()
                { this->handleUpload(); });
-    server->on("/upload", HTTP_POST, [this]()
-               { server->send(200, "text/plain", "Upload complete - <a href='/upload'>Back to File Manager</a>"); }, [this]()
+    server->on("/upload", HTTP_POST, []() {}, [this]()
                { this->handleFileUpload(); });
     server->on("/delete", HTTP_POST, [this]()
                { this->handleDeleteFile(); });
-    server->on("/files", HTTP_GET, [this]()
+    server->on("/list", HTTP_GET, [this]()
                { this->handleListFiles(); });
     server->on("/firmware", HTTP_GET, [this]()
                { this->handleFirmware(); });
     server->on("/firmwareUpdate", HTTP_POST, [this]()
                { this->handleFirmwareUpdate(); });
+
+    // Add static file handler
+    server->onNotFound([this]()
+                       {
+        String path = server->uri();
+        if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".html"))
+        {
+            this->handleStaticFile();
+        }
+        else
+        {
+            server->send(404, "text/plain", "Not found");
+        } });
 }
