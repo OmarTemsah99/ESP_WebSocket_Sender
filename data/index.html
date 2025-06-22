@@ -9,11 +9,6 @@
   <body>
     <h1>ESP32 Sensor Monitor</h1>
 
-    <div class="container sensor-data">
-      <h2>Sensor Data</h2>
-      <div id="sensorList"></div>
-    </div>
-
     <div class="container controls">
       <h2>Device Management</h2>
       <div class="info">
@@ -28,44 +23,7 @@
     </div>
 
     <script>
-      function updateSensorData() {
-        fetch("/sensorData")
-          .then((response) => response.json())
-          .then((data) => {
-            const sensorList = document.getElementById("sensorList");
-            sensorList.innerHTML = "";
-
-            const sensorCount = Object.keys(data).length;
-            if (sensorCount === 0) {
-              sensorList.innerHTML =
-                '<div class="sensor">No sensor data available</div>';
-              return;
-            }
-
-            for (const [ip, sensorInfo] of Object.entries(data)) {
-              const sensorDiv = document.createElement("div");
-              sensorDiv.className = "sensor";
-              sensorDiv.innerHTML = `
-                            <strong>Client ID: ${sensorInfo.clientId}</strong><br>
-                            IP Address: ${ip}<br>
-                            Sensor Value: ${sensorInfo.value}
-                        `;
-              sensorList.appendChild(sensorDiv);
-            }
-          })
-          .catch((error) => {
-            console.error("Error:", error);
-            const sensorList = document.getElementById("sensorList");
-            sensorList.innerHTML =
-              '<div class="sensor">Error loading sensor data</div>';
-          });
-      }
-
-      // Update sensor data every 2s for main page (less frequent than dedicated page)
-      setInterval(updateSensorData, 200);
-
-      // Initial load
-      updateSensorData();
+      // Sensor data section removed for separation of concern
     </script>
   </body>
 </html>

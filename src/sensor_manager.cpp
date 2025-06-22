@@ -3,6 +3,7 @@
 void SensorManager::updateSensorData(const String &senderIP, const String &clientId, int sensorValue)
 {
     sensorDataMap[senderIP] = {clientId, sensorValue};
+    // Serial.printf("Sensor update from %s: clientId=%s, value=%d\n", senderIP.c_str(), clientId.c_str(), sensorValue);
 }
 
 String SensorManager::getSensorDataJSON() const
