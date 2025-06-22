@@ -30,6 +30,7 @@ public:
     void handleListFiles();
     void handleFirmware();
     void handleFirmwareUpdate();
+    void handleSensorDataPage(); // Serve the dedicated sensor data page
     void setupRoutes();
 };
 

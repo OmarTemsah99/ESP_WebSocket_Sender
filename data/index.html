@@ -24,6 +24,7 @@
       </div>
       <a href="/upload" class="btn btn-upload">File Upload</a>
       <a href="/firmware" class="btn btn-firmware">Firmware Update</a>
+      <a href="/sensorpage" class="btn">Sensor Data Page</a>
     </div>
 
     <script>
@@ -60,8 +61,8 @@
           });
       }
 
-      // Update sensor data every 50ms for more responsive updates
-      setInterval(updateSensorData, 50);
+      // Update sensor data every 2s for main page (less frequent than dedicated page)
+      setInterval(updateSensorData, 200);
 
       // Initial load
       updateSensorData();

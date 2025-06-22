@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Sensor Data</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      function loadSensorData() {
+        fetch("/sensorData")
+          .then((response) => response.json())
+          .then((data) => {
+            const container = document.getElementById("sensorDataContainer");
+            container.innerHTML = "";
+            if (Array.isArray(data) && data.length > 0) {
+              data.forEach((sensor) => {
+                const div = document.createElement("div");
+                div.className = "sensor";
+                div.innerHTML = `<strong>ID:</strong> ${sensor.id || ""}<br>
+                <strong>Value:</strong> ${sensor.value || ""}<br>
+                <strong>IP:</strong> ${sensor.ip || ""}`;
+                container.appendChild(div);
+              });
+            } else if (typeof data === "object") {
+              // If data is a single object
+              const div = document.createElement("div");
+              div.className = "sensor";
+              div.innerHTML = Object.entries(data)
+                .map(([k, v]) => `<strong>${k}:</strong> ${v}`)
+                .join("<br>");
+              container.appendChild(div);
+            } else {
+              container.innerHTML =
+                '<div class="info">No sensor data available.</div>';
+            }
+          })
+          .catch((err) => {
+            document.getElementById("sensorDataContainer").innerHTML =
+              '<div class="info">Error loading sensor data.</div>';
+          });
+      }
+      window.addEventListener("load", () => {
+        loadSensorData();
+        setInterval(loadSensorData, 5000); // auto-refresh every 5s
+      });
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Sensor Data</h2>
+      <div id="sensorDataContainer">Loading...</div>
+      <a href="/" class="back-btn">Back to Main Page</a>
+    </div>
+  </body>
+</html>

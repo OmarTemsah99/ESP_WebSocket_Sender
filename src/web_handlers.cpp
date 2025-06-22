@@ -117,12 +117,12 @@ void WebHandlers::handleFileUpload()
         String filename = upload.filename;
         if (!filename.startsWith("/"))
             filename = "/" + filename;
-        // Restrict file types for file manager: only .html, .css, .js
-        if (!(filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".js")))
+        // Allow only .html, .css, .js, .bin files
+        if (!(filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".js") || filename.endsWith(".bin")))
         {
             Serial.printf("Rejected upload: %s (invalid extension)\n", filename.c_str());
             uploadSuccess = false;
-            String json = "{\"success\":false,\"message\":\"Only .html, .css, .js files are allowed.\"}";
+            String json = "{\"success\":false,\"message\":\"Only .html, .css, .js, .bin files are allowed.\"}";
             server->send(400, "application/json", json);
             return;
         }
@@ -407,6 +407,32 @@ void WebHandlers::handleStaticFile()
     file.close();
 }
 
+void WebHandlers::handleSensorDataPage()
+{
+    if (!SPIFFS.exists("/sensor_data.html"))
+    {
+        Serial.println("Error: sensor_data.html not found in SPIFFS");
+        server->send(500, "text/plain", "sensor_data.html not found in SPIFFS");
+        return;
+    }
+    File file = SPIFFS.open("/sensor_data.html", "r");
+    if (!file)
+    {
+        Serial.println("Error: Failed to open sensor_data.html");
+        server->send(500, "text/plain", "Failed to open sensor_data.html");
+        return;
+    }
+    if (file.size() == 0)
+    {
+        Serial.println("Error: sensor_data.html is empty");
+        server->send(500, "text/plain", "sensor_data.html is empty");
+        file.close();
+        return;
+    }
+    sendFileInChunks(file, "/sensor_data.html");
+    file.close();
+}
+
 void WebHandlers::setupRoutes()
 {
     server->on("/", HTTP_GET, [this]()
@@ -429,6 +455,8 @@ void WebHandlers::setupRoutes()
                { this->handleFirmware(); });
     server->on("/firmwareUpdate", HTTP_POST, [this]()
                { this->handleFirmwareUpdate(); });
+    server->on("/sensorpage", HTTP_GET, [this]()
+               { this->handleSensorDataPage(); });
 
     // Add static file handler
     server->onNotFound([this]()
