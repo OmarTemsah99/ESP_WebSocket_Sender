@@ -108,6 +108,9 @@ void WebHandlers::handleFileUpload()
 {
     HTTPUpload &upload = server->upload();
     static File fsUploadFile;
+    static String lastFilename;
+    static size_t lastTotalSize = 0;
+    static bool uploadSuccess = false;
 
     if (upload.status == UPLOAD_FILE_START)
     {
@@ -116,12 +119,16 @@ void WebHandlers::handleFileUpload()
             filename = "/" + filename;
         Serial.printf("handleFileUpload Start: %s\n", filename.c_str());
         fsUploadFile = SPIFFS.open(filename, "w");
+        lastFilename = filename;
+        lastTotalSize = 0;
+        uploadSuccess = fsUploadFile;
     }
     else if (upload.status == UPLOAD_FILE_WRITE)
     {
         if (fsUploadFile)
         {
             fsUploadFile.write(upload.buf, upload.currentSize);
+            lastTotalSize += upload.currentSize;
         }
     }
     else if (upload.status == UPLOAD_FILE_END)
@@ -130,7 +137,21 @@ void WebHandlers::handleFileUpload()
         {
             fsUploadFile.close();
             Serial.printf("handleFileUpload Success: %u bytes\n", upload.totalSize);
+            uploadSuccess = true;
         }
+        // Respond with JSON for AJAX
+        String json = String("{\"success\":") + (uploadSuccess ? "true" : "false") + ",\"message\":\"" + (uploadSuccess ? "Upload complete." : "Upload failed.") + "\"}";
+        server->send(200, "application/json", json);
+    }
+    else if (upload.status == UPLOAD_FILE_ABORTED)
+    {
+        if (fsUploadFile)
+        {
+            fsUploadFile.close();
+        }
+        uploadSuccess = false;
+        String json = "{\"success\":false,\"message\":\"Upload aborted.\"}";
+        server->send(500, "application/json", json);
     }
 }
 

@@ -79,6 +79,58 @@
           });
       }
 
+      // AJAX firmware upload with progress bar
+      function ajaxFirmwareUpload(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("firmwareFile");
+        const file = fileInput.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append("upload", file);
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload", true);
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            document.getElementById("progressBar").style.width = percent + "%";
+            document.getElementById("progressBar").innerText = percent + "%";
+          }
+        };
+        xhr.onload = function () {
+          if (xhr.status === 200) {
+            let resp = {};
+            try {
+              resp = JSON.parse(xhr.responseText);
+            } catch {}
+            document.getElementById("uploadStatus").style.color = resp.success
+              ? "green"
+              : "red";
+            document.getElementById("uploadStatus").innerText =
+              resp.message || xhr.responseText;
+            if (resp.success) {
+              setTimeout(() => {
+                document.getElementById("progressBar").style.width = "0%";
+                loadFirmwareFiles();
+                setTimeout(() => {
+                  document.getElementById("uploadStatus").innerText = "";
+                }, 2000);
+              }, 1000);
+            }
+          } else {
+            document.getElementById("uploadStatus").style.color = "red";
+            document.getElementById("uploadStatus").innerText =
+              "Upload failed.";
+          }
+        };
+        xhr.onerror = function () {
+          document.getElementById("uploadStatus").style.color = "red";
+          document.getElementById("uploadStatus").innerText = "Upload error.";
+        };
+        document.getElementById("uploadStatus").style.color = "orange";
+        document.getElementById("uploadStatus").innerText = "Uploading...";
+        xhr.send(formData);
+      }
+
       // Load firmware files when page loads
       window.addEventListener("load", loadFirmwareFiles);
     </script>
@@ -98,10 +150,18 @@
 
       <div class="firmware-form">
         <h3>Upload New Firmware</h3>
-        <form method="POST" action="/upload" enctype="multipart/form-data">
-          <input type="file" name="upload" accept=".bin" required />
+        <form id="firmwareUploadForm" enctype="multipart/form-data">
+          <input
+            type="file"
+            id="firmwareFile"
+            name="upload"
+            accept=".bin"
+            required />
           <input type="submit" value="Upload Firmware (.bin)" />
         </form>
+        <div class="progress">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
         <div id="uploadStatus"></div>
       </div>
 
@@ -116,5 +176,10 @@
 
       <a href="/" class="back-btn">Back to Main Page</a>
     </div>
+    <script>
+      document
+        .getElementById("firmwareUploadForm")
+        .addEventListener("submit", ajaxFirmwareUpload);
+    </script>
   </body>
 </html>
