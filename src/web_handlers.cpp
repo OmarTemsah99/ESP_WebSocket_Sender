@@ -117,6 +117,15 @@ void WebHandlers::handleFileUpload()
         String filename = upload.filename;
         if (!filename.startsWith("/"))
             filename = "/" + filename;
+        // Restrict file types for file manager: only .html, .css, .js
+        if (!(filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".js")))
+        {
+            Serial.printf("Rejected upload: %s (invalid extension)\n", filename.c_str());
+            uploadSuccess = false;
+            String json = "{\"success\":false,\"message\":\"Only .html, .css, .js files are allowed.\"}";
+            server->send(400, "application/json", json);
+            return;
+        }
         Serial.printf("handleFileUpload Start: %s\n", filename.c_str());
         fsUploadFile = SPIFFS.open(filename, "w");
         lastFilename = filename;
@@ -139,7 +148,6 @@ void WebHandlers::handleFileUpload()
             Serial.printf("handleFileUpload Success: %u bytes\n", upload.totalSize);
             uploadSuccess = true;
         }
-        // Respond with JSON for AJAX
         String json = String("{\"success\":") + (uploadSuccess ? "true" : "false") + ",\"message\":\"" + (uploadSuccess ? "Upload complete." : "Upload failed.") + "\"}";
         server->send(200, "application/json", json);
     }

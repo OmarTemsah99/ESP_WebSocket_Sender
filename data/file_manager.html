@@ -58,6 +58,68 @@
           });
       }
 
+      // AJAX file upload with progress bar and file type restriction
+      function ajaxFileUpload(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("fileInput");
+        const file = fileInput.files[0];
+        if (!file) return;
+        // Only allow html, css, js
+        const allowed = ["text/html", "text/css", "application/javascript"];
+        const extAllowed = [".html", ".css", ".js"];
+        const fileName = file.name.toLowerCase();
+        if (!extAllowed.some((ext) => fileName.endsWith(ext))) {
+          document.getElementById("uploadStatus").style.color = "red";
+          document.getElementById("uploadStatus").innerText =
+            "Only .html, .css, .js files are allowed.";
+          return;
+        }
+        const formData = new FormData();
+        formData.append("upload", file);
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload", true);
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            document.getElementById("progressBar").style.width = percent + "%";
+            document.getElementById("progressBar").innerText = percent + "%";
+          }
+        };
+        xhr.onload = function () {
+          if (xhr.status === 200) {
+            let resp = {};
+            try {
+              resp = JSON.parse(xhr.responseText);
+            } catch {}
+            document.getElementById("uploadStatus").style.color = resp.success
+              ? "green"
+              : "red";
+            document.getElementById("uploadStatus").innerText =
+              resp.message || xhr.responseText;
+            if (resp.success) {
+              setTimeout(() => {
+                document.getElementById("progressBar").style.width = "0%";
+                loadFileList();
+                setTimeout(() => {
+                  document.getElementById("uploadStatus").innerText = "";
+                }, 2000);
+              }, 1000);
+            }
+          } else {
+            document.getElementById("uploadStatus").style.color = "red";
+            document.getElementById("uploadStatus").innerText =
+              "Upload failed.";
+          }
+        };
+        xhr.onerror = function () {
+          document.getElementById("uploadStatus").style.color = "red";
+          document.getElementById("uploadStatus").innerText = "Upload error.";
+        };
+        document.getElementById("uploadStatus").style.color = "orange";
+        document.getElementById("uploadStatus").innerText = "Uploading...";
+        xhr.send(formData);
+      }
+
       // Load file list when page loads
       window.addEventListener("load", loadFileList);
     </script>
@@ -68,10 +130,19 @@
 
       <div class="upload-form">
         <h3>Upload New File</h3>
-        <form method="POST" action="/upload" enctype="multipart/form-data">
-          <input type="file" name="upload" required />
+        <form id="fileUploadForm" enctype="multipart/form-data">
+          <input
+            type="file"
+            id="fileInput"
+            name="upload"
+            accept=".html,.css,.js"
+            required />
           <input type="submit" value="Upload File" />
         </form>
+        <div class="progress">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div id="uploadStatus"></div>
       </div>
 
       <button class="refresh-btn" onclick="refreshFiles()">
@@ -86,5 +157,10 @@
       <br />
       <a href="/" class="back-btn">Back to Main Page</a>
     </div>
+    <script>
+      document
+        .getElementById("fileUploadForm")
+        .addEventListener("submit", ajaxFileUpload);
+    </script>
   </body>
 </html>
