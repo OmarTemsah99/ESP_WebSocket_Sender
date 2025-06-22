@@ -23,8 +23,8 @@ extern const IPAddress DNS_SERVER;
 #define OTA_HOSTNAME "ESP32-Sensor-Monitor"
 
 // Timing constants
-#define RECONNECT_INTERVAL 10000  // 10 seconds
-#define SENSOR_UPDATE_INTERVAL 50 // 50ms
-#define CONNECTION_TIMEOUT 20     // 20 attempts (10 seconds)
+#define RECONNECT_INTERVAL 10000   // 10 seconds
+#define SENSOR_UPDATE_INTERVAL 200 // 200ms
+#define CONNECTION_TIMEOUT 20      // 20 attempts (10 seconds)
 
 #endif // CONFIG_H
