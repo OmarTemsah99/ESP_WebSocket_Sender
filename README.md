@@ -529,7 +529,7 @@ MIT License - Free for personal and commercial use
 Get a comprehensive look at the ESP32-S3 Sensor Monitor's features and operation:
 
 <div align="center">
-  [![ESP32-S3 Project Overview Thumbnail](https://placehold.co/600x300/000/FFF?text=PROJECT+OVERVIEW+DEMO)](YOUR_GOOGLE_DRIVE_VIDEO_LINK_FOR_OVERVIEW)
+  [![ESP32-S3 Project Overview Thumbnail]https://drive.google.com/drive/folders/1sLqX2KvURR44xT6yc-h5InCnI4ER0E39?usp=sharing
   <br>
   *Click to watch the Project Overview Demo*
 </div>
