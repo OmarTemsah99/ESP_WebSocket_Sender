@@ -164,6 +164,16 @@ pio run -t upload -e esp32-s3-ota
 - **Status Monitoring**: System health indicators
 - **LED Control**: RGB color management
 
+### 📈 **Sensor Data Viewer** (`http://192.168.1.200/sensor_data`)
+- **Live Refresh**: Automatically updates every 200ms
+- **Detailed Display**:
+- **IP Address**
+- **Client ID**
+- **Sensor Value**
+- **Error Handling**: Displays fallback message on failure
+- **Clean UI**: Styled via shared /styles.css
+- **Navigation**: Includes back button to main dashboard
+
 ### 📁 **File Manager** (`http://192.168.1.200/upload`)
 
 - **Upload Files**: Drag & drop interface
