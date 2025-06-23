@@ -1,54 +1,52 @@
-# ESP32-S3 Sensor Monitor
+# ESP32 WebSocket Sensor Monitor
 
 A comprehensive ESP32-S3 based sensor monitoring system with web interface, file management, and over-the-air (OTA) firmware updates. Features real-time sensor data visualization, RGB LED status indicators, and a complete web-based management interface.
 
-## Features
+## 🚀 Features
 
-- **Real-time Sensor Monitoring**: Collect and display sensor data from multiple clients
+- **Real-time Sensor Monitoring**: Collect and display sensor data from multiple clients with dedicated sensor data page
 - **Web Interface**: Clean, responsive web UI for monitoring and management
+- **Auto-refresh Sensor Data**: Real-time updates every 200ms on sensor data page
 - **File Management**: Upload, download, and delete files on the SPIFFS filesystem
 - **OTA Updates**: Over-the-air firmware updates via web interface
 - **RGB LED Status**: Visual indicators for connection status and sensor states
 - **Static IP Configuration**: Reliable network connectivity
 - **RESTful API**: JSON-based API for sensor data integration
 
-## Hardware Requirements
+## 🛠️ Hardware Requirements
 
 - ESP32-S3 Development Board (tested on ESP32-S3-DevKitC-1)
 - WS2812B RGB LED (NeoPixel) connected to GPIO 48
 - Stable power supply
 - WiFi network access
 
-## Pin Configuration
+## 📋 Pin Configuration
 
+- **RGB LED (WS2812B)**: GPIO 48
+- **Number of pixels**: 1
+
+## 📚 Dependencies
+
+The following libraries are required:
+
+```ini
+adafruit/Adafruit NeoPixel @ ^1.11.0
 ```
-RGB LED (WS2812B): GPIO 48
-Number of pixels: 1
-```
 
-## Software Dependencies
-
-### PlatformIO Libraries
-
-- `adafruit/Adafruit NeoPixel @ ^1.11.0`
-
-### Built-in Libraries
-
+Built-in ESP32 libraries:
 - WiFi
 - WebServer
 - SPIFFS
 - ArduinoOTA
 - Update
 
-## Installation
+## 🔧 Setup Instructions
 
 ### 1. Hardware Setup
-
 - Connect the WS2812B RGB LED to GPIO 48
 - Ensure proper power supply to the ESP32-S3
 
 ### 2. Configuration
-
 Create a `config.cpp` file in the `src/` directory with your network settings:
 
 ```cpp
@@ -65,41 +63,36 @@ const IPAddress SUBNET(255, 255, 255, 0);
 const IPAddress DNS_SERVER(8, 8, 8, 8);
 ```
 
-### 3. Build and Upload
+### 3. Installation
 
 ```bash
 # Install PlatformIO CLI
 pip install platformio
 
 # Clone the repository
-git clone <repository_url>
-cd esp32-sensor-monitor
+git clone https://github.com/OmarTemsah99/ESP_WebSocket
+cd ESP_WebSocket
 
 # Build and upload via USB
 pio run -t upload -e esp32-s3-usb
 
 # Upload filesystem data
 pio run -t uploadfs -e esp32-s3-usb
-```
 
-### 4. OTA Updates (After Initial Setup)
-
-```bash
 # For OTA updates (update the IP address in platformio.ini)
 pio run -t upload -e esp32-s3-ota
 ```
 
-## Usage
-
-### Web Interface
+## 🌐 Web Interface Access
 
 After successful connection, access the web interface at:
 
 - **Main Dashboard**: `http://192.168.1.200/` (or your configured IP)
+- **Sensor Data Page**: `http://192.168.1.200/sensorpage` (real-time sensor monitoring)
 - **File Manager**: `http://192.168.1.200/upload`
 - **Firmware Update**: `http://192.168.1.200/firmware`
 
-### LED Status Indicators
+## 💡 LED Status Indicators
 
 - **Red**: Disconnected from WiFi
 - **Blue (Blinking)**: Connecting to WiFi
@@ -107,10 +100,9 @@ After successful connection, access the web interface at:
 - **Blue (Solid)**: Sensor value = 1
 - **Red (Solid)**: Sensor value = 0
 
-### API Endpoints
+## 📡 API Endpoints
 
-#### Sensor Data
-
+### Sensor Data Submission
 ```http
 POST /sensor
 Content-Type: application/x-www-form-urlencoded
@@ -118,34 +110,32 @@ Content-Type: application/x-www-form-urlencoded
 clientId=sensor1&value=1
 ```
 
-#### Get Sensor Data
-
+### Get Sensor Data
 ```http
 GET /sensorData
 Response: {"192.168.1.100": {"clientId": "sensor1", "value": 1}}
 ```
 
-#### Control LED Color
-
+### LED Control
 ```http
 GET /color?r=255&g=0&b=0
 ```
 
-#### File Operations
-
+### File Management
 ```http
 GET /list                    # List files
 POST /delete?file=filename   # Delete file
 POST /upload                 # Upload file (multipart/form-data)
 ```
 
-## File Structure
+## 📁 Project Structure
 
 ```
 ├── data/                    # SPIFFS filesystem data
 │   ├── index.html          # Main dashboard
+│   ├── sensor_data.html    # Real-time sensor monitoring page
 │   ├── file_manager.html   # File management interface
-│   ├── firmware_update.html # Firmware update interface
+│   ├── firmware_update.html# Firmware update interface
 │   └── styles.css          # Stylesheet
 ├── include/                # Header files
 │   ├── config.h           # Configuration constants
@@ -164,96 +154,87 @@ POST /upload                 # Upload file (multipart/form-data)
 └── platformio.ini        # PlatformIO configuration
 ```
 
-## Configuration Options
+## ⚙️ Customization
 
 ### Network Settings
-
 - Modify IP addresses in `config.cpp`
 - Update OTA settings in `platformio.ini`
 
-### Hardware Pins
-
+### Hardware Configuration
 - Change `RGB_LED_PIN` in `config.h`
 - Adjust `NUM_PIXELS` for multiple LEDs
 
-### Timing
-
+### Timing Configuration
 - `RECONNECT_INTERVAL`: WiFi reconnection delay (default: 10 seconds)
 - `SENSOR_UPDATE_INTERVAL`: Sensor data refresh rate (default: 50ms)
 
-## Development
+### Adding Features
+- **New Web Routes**: Add handlers in `web_handlers.cpp`
+- **Sensor Types**: Extend `SensorManager` class
+- **LED Patterns**: Add methods to `LEDController`
 
-### Adding New Features
-
-1. **New Web Routes**: Add handlers in `web_handlers.cpp`
-2. **Sensor Types**: Extend `SensorManager` class
-3. **LED Patterns**: Add methods to `LEDController`
-
-### Building for Production
+## 🏗️ Building
 
 ```bash
 # Optimized build
 pio run -e esp32-s3-ota
 ```
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-### Common Issues
+### WiFi Connection Failed
+- Check credentials in `config.cpp`
+- Verify network settings
+- Check signal strength
 
-1. **WiFi Connection Failed**
+### SPIFFS Mount Failed
+- Upload filesystem: `pio run -t uploadfs`
+- Format SPIFFS via serial monitor
 
-   - Check credentials in `config.cpp`
-   - Verify network settings
-   - Check signal strength
+### OTA Update Failed
+- Ensure stable power supply
+- Check IP address configuration
+- Verify `.bin` file integrity
 
-2. **SPIFFS Mount Failed**
+### Web Interface Not Loading
+- Verify `index.html` exists in SPIFFS
+- Check file permissions
+- Monitor serial output for errors
 
-   - Upload filesystem: `pio run -t uploadfs`
-   - Format SPIFFS via serial monitor
+## 🔍 Debugging
 
-3. **OTA Update Failed**
-
-   - Ensure stable power supply
-   - Check IP address configuration
-   - Verify `.bin` file integrity
-
-4. **Web Interface Not Loading**
-   - Verify `index.html` exists in SPIFFS
-   - Check file permissions
-   - Monitor serial output for errors
-
-### Serial Monitor Commands
-
-```
 Monitor at 115200 baud for debug information:
 - WiFi connection status
 - File system operations
 - Sensor data updates
 - Error messages
-```
 
-## Safety Considerations
+## ⚠️ Important Notes
 
 - **Firmware Updates**: Ensure stable power during OTA updates
 - **File Operations**: Backup important files before deletion
 - **Network Security**: Change default OTA password in production
 - **Power Supply**: Use adequate power supply for stable operation
 
-## License
+## 📄 License
 
 This project is open source. Please check the license file for details.
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+- Fork the repository
+- Create a feature branch
+- Make your changes
+- Submit a pull request
 
-## Support
+## 🆘 Support
 
 For issues and questions:
-
 - Check the troubleshooting section
 - Review serial monitor output
 - Submit issues with detailed error logs
+
+---
+
+**Created by**: [OmarTemsah99](https://github.com/OmarTemsah99)  
+**Repository**: [ESP_WebSocket](https://github.com/OmarTemsah99/ESP_WebSocket)
