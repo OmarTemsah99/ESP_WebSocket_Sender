@@ -16,6 +16,9 @@ WebServer server(WEB_SERVER_PORT);
 WebHandlers webHandlers(&server, &sensorManager, &ledController);
 WiFiManager wifiManager(&ledController);
 
+unsigned long lastSensorDataPrint = 0;
+const long printInterval = 200;
+
 void setup()
 {
   // Initialize Serial for debugging
@@ -54,6 +57,8 @@ void setup()
 
 void loop()
 {
+  unsigned long currentMilis = millis();
+
   // Handle WiFi connection and OTA
   wifiManager.handleConnection();
 
@@ -61,5 +66,11 @@ void loop()
   if (wifiManager.isConnected())
   {
     server.handleClient();
+  }
+
+  if (currentMilis - lastSensorDataPrint >= printInterval)
+  {
+    Serial.println(sensorManager.getFormattedSensorData(6));
+    lastSensorDataPrint = currentMilis;
   }
 }

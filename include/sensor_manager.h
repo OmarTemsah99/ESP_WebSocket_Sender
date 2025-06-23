@@ -22,6 +22,8 @@ public:
     const std::map<String, SensorData> &getAllSensorData() const;
     void clearSensorData();
     bool hasSensorData() const;
+    String getFormattedSensorData() const;
+    String getFormattedSensorData(int minSensors) const;
 };
 
 #endif // SENSOR_MANAGER_H

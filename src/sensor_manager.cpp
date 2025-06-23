@@ -42,3 +42,54 @@ bool SensorManager::hasSensorData() const
 {
     return !sensorDataMap.empty();
 }
+
+String SensorManager::getFormattedSensorData() const
+{
+    String result = "TP:";
+    bool first = true;
+
+    for (const auto &pair : sensorDataMap)
+    {
+        if (!first)
+        {
+            result += ",";
+        }
+        result += String(pair.second.value);
+        first = false;
+    }
+
+    return result;
+}
+
+String SensorManager::getFormattedSensorData(int minSensors) const
+{
+    String result = "TP:";
+    bool first = true;
+    int sensorCount = 0;
+
+    // Add actual sensor values
+    for (const auto &pair : sensorDataMap)
+    {
+        if (!first)
+        {
+            result += ",";
+        }
+        result += String(pair.second.value);
+        first = false;
+        sensorCount++;
+    }
+
+    // Pad with zeros if we have fewer sensors than minSensors
+    while (sensorCount < minSensors)
+    {
+        if (!first)
+        {
+            result += ",";
+        }
+        result += "0";
+        first = false;
+        sensorCount++;
+    }
+
+    return result;
+}
