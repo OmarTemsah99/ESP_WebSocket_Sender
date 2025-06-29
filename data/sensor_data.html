@@ -5,6 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/styles.css" />
     <script>
+      // Helper to get/set clientId in browser and device
+      function getClientId() {
+        let id = parseInt(localStorage.getItem("clientId"));
+        if (isNaN(id) || id < 0 || id > 15) id = 0;
+        return id;
+      }
+      function setClientId(id) {
+        id = Math.max(0, Math.min(15, id));
+        localStorage.setItem("clientId", id);
+        updateClientIdDisplay();
+        // Send to device
+        fetch("/setClientId", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "id=" + id,
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (!data.success) alert("Failed to set device ID!");
+          })
+          .catch(() => alert("Failed to set device ID!"));
+      }
+      function updateClientIdDisplay() {
+        document.getElementById("clientIdValue").textContent = getClientId();
+      }
+      function changeClientId(delta) {
+        let id = getClientId();
+        id = Math.max(0, Math.min(15, id + delta));
+        setClientId(id);
+      }
       function loadLocalSensorData() {
         fetch("/localSensorData")
           .then((response) => response.json())
@@ -16,7 +46,9 @@
               div.className = "sensor";
               div.innerHTML = `
                 <strong>IP Address:</strong> ${data.ip || "N/A"}<br>
-                <strong>Client ID:</strong> ${data.clientId || "N/A"}<br>
+                <strong>Client ID (from device):</strong> ${
+                  data.clientId || "N/A"
+                }<br>
                 <strong>Sensor Value:</strong> ${
                   typeof data.value !== "undefined" ? data.value : "N/A"
                 }<br>
@@ -34,6 +66,13 @@
           });
       }
       window.addEventListener("load", () => {
+        updateClientIdDisplay();
+        document.getElementById("decreaseBtn").onclick = () =>
+          changeClientId(-1);
+        document.getElementById("increaseBtn").onclick = () =>
+          changeClientId(1);
+        // Set device to browser's clientId on load
+        setClientId(getClientId());
         loadLocalSensorData();
         setInterval(loadLocalSensorData, 200); // auto-refresh
       });
@@ -42,6 +81,14 @@
   <body>
     <div class="container">
       <h2>Local Sensor Data</h2>
+      <div class="client-id-controls">
+        <span>Client ID: <span id="clientIdValue"></span></span>
+        <button class="btn btn-id" id="decreaseBtn">-</button>
+        <button class="btn btn-id" id="increaseBtn">+</button>
+        <div class="info">
+          (ID is now sent to the device and used for server updates.)
+        </div>
+      </div>
       <div id="sensorDataContainer">Loading...</div>
       <a href="/" class="back-btn">Back to Main Page</a>
     </div>

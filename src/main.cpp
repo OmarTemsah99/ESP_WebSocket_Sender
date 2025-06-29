@@ -20,6 +20,25 @@ const char *serverUrl = "http://192.168.1.200/sensor"; // Central server endpoin
 unsigned long lastSensorSend = 0;
 const long sendInterval = 200; // ms
 
+// Set your client ID here (0-15)
+int clientId = 0; // Will be set from browser via /setClientId
+
+void handleSetClientId()
+{
+  if (server.hasArg("id"))
+  {
+    int newId = server.arg("id").toInt();
+    if (newId >= 0 && newId <= 15)
+    {
+      clientId = newId;
+      server.send(200, "application/json", "{\"success\":true,\"clientId\":" + String(clientId) + "}");
+      Serial.printf("[CLIENT_ID] Updated to %d via web\n", clientId);
+      return;
+    }
+  }
+  server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ID\"}");
+}
+
 void setup()
 {
   // Initialize Serial for debugging
@@ -42,6 +61,7 @@ void setup()
   {
     // Setup web server routes (for local HTML, update, etc.)
     webHandlers.setupRoutes();
+    server.on("/setClientId", HTTP_POST, handleSetClientId); // Add endpoint
     server.begin();
     Serial.println("HTTP server started");
     Serial.println("Setup completed successfully!");
@@ -68,16 +88,16 @@ void loop()
   // --- Send our own sensor data to the central server ---
   if (wifiManager.isConnected() && (currentMillis - lastSensorSend >= sendInterval))
   {
-    int sensorValue = sensorManager.getLocalSensorValue(); // You may need to implement this if not present
+    int sensorValue = sensorManager.getLocalSensorValue();
 
     HTTPClient http;
     http.begin(serverUrl);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-    String postData = "&value=" + String(sensorValue);
+    String postData = "clientId=" + String(clientId) + "&value=" + String(sensorValue);
     int httpResponseCode = http.POST(postData);
     if (httpResponseCode == 200)
     {
-      Serial.printf("[SEND] Value: %d\n", sensorValue);
+      Serial.printf("[SEND] ID: %d, Value: %d\n", clientId, sensorValue);
     }
     else
     {
