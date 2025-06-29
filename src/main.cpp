@@ -20,16 +20,6 @@ const char *serverUrl = "http://192.168.1.200/sensor"; // Central server endpoin
 unsigned long lastSensorSend = 0;
 const long sendInterval = 200; // ms
 
-// Generate a unique client ID using the ESP's MAC address
-String getUniqueClientId()
-{
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  char clientId[13];
-  snprintf(clientId, sizeof(clientId), "ESP_%02X%02X%02X", mac[3], mac[4], mac[5]);
-  return String(clientId);
-}
-
 void setup()
 {
   // Initialize Serial for debugging
@@ -79,12 +69,11 @@ void loop()
   if (wifiManager.isConnected() && (currentMillis - lastSensorSend >= sendInterval))
   {
     int sensorValue = sensorManager.getLocalSensorValue(); // You may need to implement this if not present
-    String clientId = getUniqueClientId();
 
     HTTPClient http;
     http.begin(serverUrl);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-    String postData = "clientId=" + clientId + "&value=" + String(sensorValue);
+    String postData = "&value=" + String(sensorValue);
     int httpResponseCode = http.POST(postData);
     if (httpResponseCode == 200)
     {

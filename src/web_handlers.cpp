@@ -92,6 +92,13 @@ void WebHandlers::handleGetSensorData()
     server->send(200, "application/json", json);
 }
 
+// New method to handle local sensor data requests
+void WebHandlers::handleGetLocalSensorData()
+{
+    String json = sensorManager->getLocalSensorDataJSON();
+    server->send(200, "application/json", json);
+}
+
 void WebHandlers::handleFileUpload()
 {
     HTTPUpload &upload = server->upload();
@@ -429,6 +436,8 @@ void WebHandlers::setupRoutes()
                { this->handleSensorData(); });
     server->on("/sensorData", HTTP_GET, [this]()
                { this->handleGetSensorData(); });
+    server->on("/localSensorData", HTTP_GET, [this]()
+               { this->handleGetLocalSensorData(); }); // New route for local sensor data
     server->on("/upload", HTTP_GET, [this]()
                { this->handleUpload(); });
     server->on("/upload", HTTP_POST, []() {}, [this]()

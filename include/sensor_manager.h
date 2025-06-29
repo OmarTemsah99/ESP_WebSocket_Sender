@@ -26,6 +26,7 @@ public:
     String getFormattedSensorData(int minSensors) const;
     // Add for client mode:
     int getLocalSensorValue() const;
+    String getLocalSensorDataJSON() const; // New method for local sensor data
 };
 
 #endif // SENSOR_MANAGER_H

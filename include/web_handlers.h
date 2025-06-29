@@ -21,6 +21,7 @@ public:
     void handleRoot();
     void handleSensorData();
     void handleGetSensorData();
+    void handleGetLocalSensorData(); // New method for local sensor data
     void handleFileUpload();
     void handleUpload();
     void handleDeleteFile();

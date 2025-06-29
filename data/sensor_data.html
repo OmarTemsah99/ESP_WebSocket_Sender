@@ -1,54 +1,47 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Sensor Data</title>
+    <title>Local Sensor Data</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/styles.css" />
     <script>
-      function loadSensorData() {
-        fetch("/sensorData")
+      function loadLocalSensorData() {
+        fetch("/localSensorData")
           .then((response) => response.json())
           .then((data) => {
             const container = document.getElementById("sensorDataContainer");
             container.innerHTML = "";
-            if (
-              data &&
-              typeof data === "object" &&
-              Object.keys(data).length > 0
-            ) {
-              for (const [ip, sensorInfo] of Object.entries(data)) {
-                const div = document.createElement("div");
-                div.className = "sensor";
-                div.innerHTML = `
-                  <strong>IP Address:</strong> ${ip}<br>
-                  <strong>Client ID:</strong> ${sensorInfo.clientId || ""}<br>
-                  <strong>Sensor Value:</strong> ${
-                    typeof sensorInfo.value !== "undefined"
-                      ? sensorInfo.value
-                      : ""
-                  }<br>
-                `;
-                container.appendChild(div);
-              }
+            if (data && typeof data === "object") {
+              const div = document.createElement("div");
+              div.className = "sensor";
+              div.innerHTML = `
+                <strong>IP Address:</strong> ${data.ip || "N/A"}<br>
+                <strong>Client ID:</strong> ${data.clientId || "N/A"}<br>
+                <strong>Sensor Value:</strong> ${
+                  typeof data.value !== "undefined" ? data.value : "N/A"
+                }<br>
+              `;
+              container.appendChild(div);
             } else {
               container.innerHTML =
-                '<div class="info">No sensor data available.</div>';
+                '<div class="info">Error loading local sensor data.</div>';
             }
           })
           .catch((err) => {
             document.getElementById("sensorDataContainer").innerHTML =
-              '<div class="info">Error loading sensor data.</div>';
+              '<div class="info">Error loading local sensor data.</div>';
+            console.error("Error:", err);
           });
       }
       window.addEventListener("load", () => {
-        loadSensorData();
-        setInterval(loadSensorData, 200); // auto-refresh
+        loadLocalSensorData();
+        setInterval(loadLocalSensorData, 200); // auto-refresh
       });
     </script>
   </head>
   <body>
     <div class="container">
-      <h2>Sensor Data</h2>
+      <h2>Local Sensor Data</h2>
       <div id="sensorDataContainer">Loading...</div>
       <a href="/" class="back-btn">Back to Main Page</a>
     </div>

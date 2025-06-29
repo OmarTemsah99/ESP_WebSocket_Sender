@@ -1,4 +1,5 @@
 #include "sensor_manager.h"
+#include <WiFi.h>
 
 void SensorManager::updateSensorData(const String &senderIP, const String &clientId, int sensorValue)
 {
@@ -94,6 +95,16 @@ String SensorManager::getFormattedSensorData(int minSensors) const
     return result;
 }
 
+// Generate a unique client ID using the ESP's MAC address
+String getUniqueClientId()
+{
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char clientId[13];
+    snprintf(clientId, sizeof(clientId), "ESP_%02X%02X%02X", mac[3], mac[4], mac[5]);
+    return String(clientId);
+}
+
 // Add a method to get this device's own sensor value
 int SensorManager::getLocalSensorValue() const
 {
@@ -104,4 +115,25 @@ int SensorManager::getLocalSensorValue() const
     int touchValue = touchRead(TOUCH_PIN);
     int sensorValue = (touchValue < TOUCH_THRESHOLD) ? 1 : 0;
     return sensorValue;
+}
+
+// New method to get local sensor data as JSON
+String SensorManager::getLocalSensorDataJSON() const
+{
+    String json = "{";
+
+    // Get local IP address
+    String localIP = WiFi.localIP().toString();
+    json += "\"ip\":\"" + localIP + "\",";
+
+    // Get unique client ID
+    String clientId = getUniqueClientId();
+    json += "\"clientId\":\"" + clientId + "\",";
+
+    // Get local sensor value
+    int sensorValue = getLocalSensorValue();
+    json += "\"value\":" + String(sensorValue);
+
+    json += "}";
+    return json;
 }
