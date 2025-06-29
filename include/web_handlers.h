@@ -21,15 +21,16 @@ public:
     void handleRoot();
     void handleSensorData();
     void handleGetSensorData();
-    void handleGetLocalSensorData(); // New method for local sensor data
+    void handleGetLocalSensorData();       // New method for local sensor data
+    void handleSetClientId(int &clientId); // New method for setting client ID
     void handleFileUpload();
     void handleUpload();
     void handleDeleteFile();
     void handleListFiles();
     void handleFirmware();
     void handleFirmwareUpdate();
-    void handleSensorDataPage(); // Serve the dedicated sensor data page
-    void setupRoutes();
+    void handleSensorDataPage();     // Serve the dedicated sensor data page
+    void setupRoutes(int &clientId); // Pass clientId reference for /setClientId
 };
 
 #endif

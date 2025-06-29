@@ -95,16 +95,6 @@ String SensorManager::getFormattedSensorData(int minSensors) const
     return result;
 }
 
-// Generate a unique client ID using the ESP's MAC address
-String getUniqueClientId()
-{
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char clientId[13];
-    snprintf(clientId, sizeof(clientId), "ESP_%02X%02X%02X", mac[3], mac[4], mac[5]);
-    return String(clientId);
-}
-
 // Add a method to get this device's own sensor value
 int SensorManager::getLocalSensorValue() const
 {
@@ -126,9 +116,9 @@ String SensorManager::getLocalSensorDataJSON() const
     String localIP = WiFi.localIP().toString();
     json += "\"ip\":\"" + localIP + "\",";
 
-    // Get unique client ID
-    String clientId = getUniqueClientId();
-    json += "\"clientId\":\"" + clientId + "\",";
+    // Use global clientId
+    extern int clientId;
+    json += "\"clientId\":" + String(clientId) + ",";
 
     // Get local sensor value
     int sensorValue = getLocalSensorValue();

@@ -428,7 +428,24 @@ void WebHandlers::handleSensorDataPage()
     file.close();
 }
 
-void WebHandlers::setupRoutes()
+// New method to handle setting client ID
+void WebHandlers::handleSetClientId(int &clientId)
+{
+    if (server->hasArg("id"))
+    {
+        int newId = server->arg("id").toInt();
+        if (newId >= 0 && newId <= 15)
+        {
+            clientId = newId;
+            server->send(200, "application/json", "{\"success\":true,\"clientId\":" + String(clientId) + "}");
+            Serial.printf("[CLIENT_ID] Updated to %d via web\n", clientId);
+            return;
+        }
+    }
+    server->send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ID\"}");
+}
+
+void WebHandlers::setupRoutes(int &clientId)
 {
     server->on("/", HTTP_GET, [this]()
                { this->handleRoot(); });
@@ -437,7 +454,9 @@ void WebHandlers::setupRoutes()
     server->on("/sensorData", HTTP_GET, [this]()
                { this->handleGetSensorData(); });
     server->on("/localSensorData", HTTP_GET, [this]()
-               { this->handleGetLocalSensorData(); }); // New route for local sensor data
+               { this->handleGetLocalSensorData(); });
+    server->on("/setClientId", HTTP_POST, [this, &clientId]()
+               { this->handleSetClientId(clientId); });
     server->on("/upload", HTTP_GET, [this]()
                { this->handleUpload(); });
     server->on("/upload", HTTP_POST, []() {}, [this]()

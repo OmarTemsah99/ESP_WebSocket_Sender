@@ -59,9 +59,7 @@ void setup()
   // Initialize WiFi
   if (wifiManager.init())
   {
-    // Setup web server routes (for local HTML, update, etc.)
-    webHandlers.setupRoutes();
-    server.on("/setClientId", HTTP_POST, handleSetClientId); // Add endpoint
+    webHandlers.setupRoutes(clientId); // Pass clientId by reference
     server.begin();
     Serial.println("HTTP server started");
     Serial.println("Setup completed successfully!");
