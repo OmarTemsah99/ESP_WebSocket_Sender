@@ -1,8 +1,8 @@
 #include "web_handlers.h"
 #include <Update.h>
 
-WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr, LEDController *ledCtrl)
-    : server(webServer), sensorManager(sensorMgr), ledController(ledCtrl)
+WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr)
+    : server(webServer), sensorManager(sensorMgr)
 {
 }
 
@@ -83,8 +83,6 @@ void WebHandlers::handleSensorData()
     int sensorValue = server->arg("value").toInt();
 
     sensorManager->updateSensorData(senderIP, clientId, sensorValue);
-    ledController->setSensorIndicator(sensorValue);
-
     server->send(200, "text/plain", "OK");
 }
 
@@ -92,16 +90,6 @@ void WebHandlers::handleGetSensorData()
 {
     String json = sensorManager->getSensorDataJSON();
     server->send(200, "application/json", json);
-}
-
-void WebHandlers::handleColor()
-{
-    int red = server->arg("r").toInt();
-    int green = server->arg("g").toInt();
-    int blue = server->arg("b").toInt();
-
-    ledController->setColor(red, green, blue);
-    server->send(200, "text/plain", "OK");
 }
 
 void WebHandlers::handleFileUpload()
@@ -441,8 +429,6 @@ void WebHandlers::setupRoutes()
                { this->handleSensorData(); });
     server->on("/sensorData", HTTP_GET, [this]()
                { this->handleGetSensorData(); });
-    server->on("/color", HTTP_GET, [this]()
-               { this->handleColor(); });
     server->on("/upload", HTTP_GET, [this]()
                { this->handleUpload(); });
     server->on("/upload", HTTP_POST, []() {}, [this]()

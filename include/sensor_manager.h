@@ -24,6 +24,8 @@ public:
     bool hasSensorData() const;
     String getFormattedSensorData() const;
     String getFormattedSensorData(int minSensors) const;
+    // Add for client mode:
+    int getLocalSensorValue() const;
 };
 
 #endif // SENSOR_MANAGER_H

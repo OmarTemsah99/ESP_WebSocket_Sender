@@ -3,19 +3,17 @@
 
 #include <WiFi.h>
 #include <ArduinoOTA.h>
-#include "led_controller.h"
 
 class WiFiManager
 {
 private:
-    LEDController *ledController;
     unsigned long lastReconnectAttempt;
 
     void setupOTA();
     void printWiFiStatus();
 
 public:
-    WiFiManager(LEDController *ledCtrl);
+    WiFiManager();
 
     bool init();
     void handleConnection();

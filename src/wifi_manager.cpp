@@ -3,7 +3,7 @@
 #include <SPIFFS.h>
 #include <Update.h>
 
-WiFiManager::WiFiManager(LEDController *ledCtrl) : ledController(ledCtrl)
+WiFiManager::WiFiManager()
 {
     lastReconnectAttempt = 0;
 }
@@ -78,23 +78,12 @@ bool WiFiManager::init()
 {
     WiFi.mode(WIFI_STA);
 
-    Serial.println("Configuring Static IP...");
-    if (!WiFi.config(STATIC_IP, GATEWAY, SUBNET, DNS_SERVER))
-    {
-        Serial.println("Static IP Configuration Failed!");
-    }
-    else
-    {
-        Serial.println("Static IP Configuration Successful");
-    }
-
     Serial.printf("Connecting to WiFi: %s\n", WIFI_SSID);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int connectionAttempts = 0;
     while (WiFi.status() != WL_CONNECTED && connectionAttempts < CONNECTION_TIMEOUT)
     {
-        ledController->setConnectingIndicator();
         delay(500);
         Serial.print(".");
         connectionAttempts++;
@@ -103,14 +92,12 @@ bool WiFiManager::init()
 
     if (WiFi.status() == WL_CONNECTED)
     {
-        ledController->setConnectedIndicator();
         printConnectionInfo();
         setupOTA();
         return true;
     }
     else
     {
-        ledController->setDisconnectedIndicator();
         Serial.println("Failed to connect to WiFi!");
         printWiFiStatus();
         return false;
@@ -131,7 +118,6 @@ void WiFiManager::handleConnection()
             WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
             lastReconnectAttempt = currentMillis;
         }
-        ledController->setConnectingIndicator();
     }
 }
 

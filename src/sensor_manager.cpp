@@ -93,3 +93,15 @@ String SensorManager::getFormattedSensorData(int minSensors) const
 
     return result;
 }
+
+// Add a method to get this device's own sensor value
+int SensorManager::getLocalSensorValue() const
+{
+// If you have a dedicated sensor pin, read it here. For example, using touchRead or analogRead.
+// Example for a touch sensor on GPIO4:
+#define TOUCH_PIN 4
+#define TOUCH_THRESHOLD 40
+    int touchValue = touchRead(TOUCH_PIN);
+    int sensorValue = (touchValue < TOUCH_THRESHOLD) ? 1 : 0;
+    return sensorValue;
+}

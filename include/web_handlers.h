@@ -4,26 +4,23 @@
 #include <WebServer.h>
 #include <SPIFFS.h>
 #include "sensor_manager.h"
-#include "led_controller.h"
 
 class WebHandlers
 {
 private:
     WebServer *server;
     SensorManager *sensorManager;
-    LEDController *ledController;
 
     String getContentType(String filename);
     void sendFileInChunks(File &file, String filename);
     void handleStaticFile();
 
 public:
-    WebHandlers(WebServer *webServer, SensorManager *sensorMgr, LEDController *ledCtrl);
+    WebHandlers(WebServer *webServer, SensorManager *sensorMgr);
 
     void handleRoot();
     void handleSensorData();
     void handleGetSensorData();
-    void handleColor();
     void handleFileUpload();
     void handleUpload();
     void handleDeleteFile();
