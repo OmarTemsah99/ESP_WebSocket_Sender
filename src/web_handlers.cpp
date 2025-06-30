@@ -2,10 +2,11 @@
 #include <Update.h>
 
 WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr)
-    : server(webServer), sensorManager(sensorMgr)
+    : server(webServer), sensorManager(sensorMgr), clientIdPtr(nullptr)
 {
 }
 
+// Helper method to determine content type
 String WebHandlers::getContentType(String filename)
 {
     if (filename.endsWith(".html"))
@@ -19,61 +20,62 @@ String WebHandlers::getContentType(String filename)
     return "text/plain";
 }
 
-void WebHandlers::sendFileInChunks(File &file, String filename)
+// Simplified file sending method
+bool WebHandlers::sendFile(String path)
 {
-    size_t fileSize = file.size();
-    String contentType = getContentType(filename);
-    server->sendHeader("Content-Length", String(fileSize));
-    server->setContentLength(fileSize);
-    server->send(200, contentType, "");
-
-    const size_t bufSize = 1024;
-    uint8_t buf[bufSize];
-    size_t totalSent = 0;
-
-    while (totalSent < fileSize)
+    if (!SPIFFS.exists(path))
     {
-        size_t toRead = min(bufSize, fileSize - totalSent);
-        size_t bytesRead = file.read(buf, toRead);
-        if (bytesRead == 0)
-        {
-            Serial.println("Error: Failed to read file");
-            break;
-        }
-        server->sendContent((char *)buf, bytesRead);
-        totalSent += bytesRead;
+        Serial.printf("File not found: %s\n", path.c_str());
+        server->send(404, "text/plain", "File not found");
+        return false;
     }
 
-    Serial.printf("File sent successfully. Total bytes: %d\n", totalSent);
+    File file = SPIFFS.open(path, "r");
+    if (!file || file.size() == 0)
+    {
+        Serial.printf("Cannot open or empty file: %s\n", path.c_str());
+        server->send(500, "text/plain", "Cannot open file");
+        file.close();
+        return false;
+    }
+
+    // Stream file directly (ESP32 WebServer handles chunking automatically)
+    server->streamFile(file, getContentType(path));
+    file.close();
+    return true;
 }
+
+// Check if file extension is allowed
+bool WebHandlers::isValidFileExtension(String filename)
+{
+    return filename.endsWith(".html") ||
+           filename.endsWith(".css") ||
+           filename.endsWith(".js") ||
+           filename.endsWith(".bin");
+}
+
+// Simplified JSON response helper
+void WebHandlers::sendJsonResponse(bool success, String message, String data)
+{
+    String json = "{\"success\":" + String(success ? "true" : "false");
+    if (message.length() > 0)
+        json += ",\"message\":\"" + message + "\"";
+    if (data.length() > 0)
+        json += "," + data;
+    json += "}";
+    server->send(success ? 200 : 400, "application/json", json);
+}
+
+// ========================= ROUTE HANDLERS =========================
 
 void WebHandlers::handleRoot()
 {
-    if (!SPIFFS.exists("/index.html"))
-    {
-        Serial.println("Error: index.html not found in SPIFFS");
-        server->send(500, "text/plain", "File not found in SPIFFS");
-        return;
-    }
+    sendFile("/index.html");
+}
 
-    File file = SPIFFS.open("/index.html", "r");
-    if (!file)
-    {
-        Serial.println("Error: Failed to open index.html");
-        server->send(500, "text/plain", "Failed to open file");
-        return;
-    }
-
-    if (file.size() == 0)
-    {
-        Serial.println("Error: index.html is empty");
-        server->send(500, "text/plain", "File is empty");
-        file.close();
-        return;
-    }
-
-    sendFileInChunks(file, "/index.html");
-    file.close();
+void WebHandlers::handleStaticFile()
+{
+    sendFile(server->uri());
 }
 
 void WebHandlers::handleSensorData()
@@ -92,113 +94,110 @@ void WebHandlers::handleGetSensorData()
     server->send(200, "application/json", json);
 }
 
-// New method to handle local sensor data requests
 void WebHandlers::handleGetLocalSensorData()
 {
     String json = sensorManager->getLocalSensorDataJSON();
     server->send(200, "application/json", json);
 }
 
+void WebHandlers::handleSensorDataPage()
+{
+    sendFile("/sensor_data.html");
+}
+
+void WebHandlers::handleSetClientId()
+{
+    if (!server->hasArg("id"))
+    {
+        sendJsonResponse(false, "Missing ID parameter");
+        return;
+    }
+
+    int newId = server->arg("id").toInt();
+    if (newId < 0 || newId > 15)
+    {
+        sendJsonResponse(false, "ID must be between 0-15");
+        return;
+    }
+
+    *clientIdPtr = newId;
+    sendJsonResponse(true, "Client ID updated", "\"clientId\":" + String(newId));
+    Serial.printf("[CLIENT_ID] Updated to %d\n", newId);
+}
+
+void WebHandlers::handleUpload()
+{
+    sendFile("/file_manager.html");
+}
+
 void WebHandlers::handleFileUpload()
 {
     HTTPUpload &upload = server->upload();
-    static File fsUploadFile;
-    static String lastFilename;
-    static size_t lastTotalSize = 0;
+    static File uploadFile;
     static bool uploadSuccess = false;
 
-    if (upload.status == UPLOAD_FILE_START)
+    switch (upload.status)
+    {
+    case UPLOAD_FILE_START:
     {
         String filename = upload.filename;
         if (!filename.startsWith("/"))
             filename = "/" + filename;
-        // Allow only .html, .css, .js, .bin files
-        if (!(filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".js") || filename.endsWith(".bin")))
+
+        if (!isValidFileExtension(filename))
         {
-            Serial.printf("Rejected upload: %s (invalid extension)\n", filename.c_str());
-            uploadSuccess = false;
-            String json = "{\"success\":false,\"message\":\"Only .html, .css, .js, .bin files are allowed.\"}";
-            server->send(400, "application/json", json);
+            Serial.printf("Rejected: %s (invalid extension)\n", filename.c_str());
+            sendJsonResponse(false, "Only .html, .css, .js, .bin files allowed");
             return;
         }
-        Serial.printf("handleFileUpload Start: %s\n", filename.c_str());
-        fsUploadFile = SPIFFS.open(filename, "w");
-        lastFilename = filename;
-        lastTotalSize = 0;
-        uploadSuccess = fsUploadFile;
+
+        Serial.printf("Upload started: %s\n", filename.c_str());
+        uploadFile = SPIFFS.open(filename, "w");
+        uploadSuccess = uploadFile;
+        break;
     }
-    else if (upload.status == UPLOAD_FILE_WRITE)
-    {
-        if (fsUploadFile)
-        {
-            fsUploadFile.write(upload.buf, upload.currentSize);
-            lastTotalSize += upload.currentSize;
-        }
-    }
-    else if (upload.status == UPLOAD_FILE_END)
-    {
-        if (fsUploadFile)
-        {
-            fsUploadFile.close();
-            Serial.printf("handleFileUpload Success: %u bytes\n", upload.totalSize);
-            uploadSuccess = true;
-        }
-        String json = String("{\"success\":") + (uploadSuccess ? "true" : "false") + ",\"message\":\"" + (uploadSuccess ? "Upload complete." : "Upload failed.") + "\"}";
-        server->send(200, "application/json", json);
-    }
-    else if (upload.status == UPLOAD_FILE_ABORTED)
-    {
-        if (fsUploadFile)
-        {
-            fsUploadFile.close();
-        }
-        uploadSuccess = false;
-        String json = "{\"success\":false,\"message\":\"Upload aborted.\"}";
-        server->send(500, "application/json", json);
+
+    case UPLOAD_FILE_WRITE:
+        if (uploadFile)
+            uploadFile.write(upload.buf, upload.currentSize);
+        break;
+
+    case UPLOAD_FILE_END:
+        if (uploadFile)
+            uploadFile.close();
+        sendJsonResponse(uploadSuccess, uploadSuccess ? "Upload complete" : "Upload failed");
+        Serial.printf("Upload %s: %u bytes\n", uploadSuccess ? "success" : "failed", upload.totalSize);
+        break;
+
+    case UPLOAD_FILE_ABORTED:
+        if (uploadFile)
+            uploadFile.close();
+        sendJsonResponse(false, "Upload aborted");
+        break;
     }
 }
 
 void WebHandlers::handleDeleteFile()
 {
     String filename = server->arg("file");
-
     if (filename.length() == 0)
     {
-        server->send(400, "text/plain", "ERROR: No filename specified");
-        Serial.println("Delete request failed: No filename specified");
+        sendJsonResponse(false, "No filename specified");
         return;
     }
 
-    // Ensure filename starts with /
     if (!filename.startsWith("/"))
-    {
         filename = "/" + filename;
-    }
 
-    Serial.printf("Attempting to delete file: %s\n", filename.c_str());
-
-    // Check if file exists first
     if (!SPIFFS.exists(filename))
     {
-        String errorMsg = "ERROR: File '" + filename + "' not found in SPIFFS";
-        server->send(404, "text/plain", errorMsg);
-        Serial.println(errorMsg);
+        sendJsonResponse(false, "File not found: " + filename);
         return;
     }
 
-    // Attempt to delete the file
-    if (SPIFFS.remove(filename))
-    {
-        String successMsg = "SUCCESS: File '" + filename + "' deleted successfully";
-        server->send(200, "text/plain", successMsg);
-        Serial.println(successMsg);
-    }
-    else
-    {
-        String errorMsg = "ERROR: Failed to delete file '" + filename + "'";
-        server->send(500, "text/plain", errorMsg);
-        Serial.println(errorMsg);
-    }
+    bool success = SPIFFS.remove(filename);
+    sendJsonResponse(success, success ? "File deleted" : "Delete failed");
+    Serial.printf("Delete %s: %s\n", filename.c_str(), success ? "success" : "failed");
 }
 
 void WebHandlers::handleListFiles()
@@ -212,273 +211,124 @@ void WebHandlers::handleListFiles()
     while (file)
     {
         if (!first)
-        {
             json += ",";
-        }
-
-        json += "{";
-        json += "\"name\":\"" + String(file.name()) + "\",";
-        json += "\"size\":" + String(file.size());
-        json += "}";
-
+        json += "{\"name\":\"" + String(file.name()) + "\",\"size\":" + String(file.size()) + "}";
         first = false;
         file = root.openNextFile();
     }
 
     json += "]";
     root.close();
-
     server->send(200, "application/json", json);
 }
 
 void WebHandlers::handleFirmware()
 {
-    if (!SPIFFS.exists("/firmware_update.html"))
-    {
-        Serial.println("Error: firmware_update.html not found in SPIFFS");
-        server->send(500, "text/plain", "firmware_update.html not found in SPIFFS");
-        return;
-    }
-
-    File file = SPIFFS.open("/firmware_update.html", "r");
-    if (!file)
-    {
-        Serial.println("Error: Failed to open firmware_update.html");
-        server->send(500, "text/plain", "Failed to open firmware_update.html");
-        return;
-    }
-
-    if (file.size() == 0)
-    {
-        Serial.println("Error: firmware_update.html is empty");
-        server->send(500, "text/plain", "firmware_update.html is empty");
-        file.close();
-        return;
-    }
-
-    sendFileInChunks(file, "/firmware_update.html");
-    file.close();
+    sendFile("/firmware_update.html");
 }
 
 void WebHandlers::handleFirmwareUpdate()
 {
     String filename = server->arg("file");
-
     if (filename.length() == 0)
     {
-        server->send(400, "text/plain", "ERROR: No firmware file specified");
-        Serial.println("Firmware update failed: No filename specified");
+        sendJsonResponse(false, "No firmware file specified");
         return;
     }
 
-    // Ensure filename starts with /
     if (!filename.startsWith("/"))
-    {
         filename = "/" + filename;
-    }
 
-    // Check if it's a .bin file
     if (!filename.endsWith(".bin"))
     {
-        server->send(400, "text/plain", "ERROR: File must be a .bin firmware file");
-        Serial.println("Firmware update failed: Not a .bin file");
+        sendJsonResponse(false, "File must be a .bin firmware file");
         return;
     }
 
-    Serial.printf("Attempting firmware update with file: %s\n", filename.c_str());
-
-    // Check if file exists
     if (!SPIFFS.exists(filename))
     {
-        String errorMsg = "ERROR: Firmware file '" + filename + "' not found in SPIFFS";
-        server->send(404, "text/plain", errorMsg);
-        Serial.println(errorMsg);
+        sendJsonResponse(false, "Firmware file not found: " + filename);
         return;
     }
 
-    // Open the firmware file
     File firmwareFile = SPIFFS.open(filename, "r");
     if (!firmwareFile)
     {
-        String errorMsg = "ERROR: Cannot open firmware file '" + filename + "'";
-        server->send(500, "text/plain", errorMsg);
-        Serial.println(errorMsg);
-        firmwareFile.close();
+        sendJsonResponse(false, "Cannot open firmware file");
         return;
     }
 
     size_t fileSize = firmwareFile.size();
-    Serial.printf("Firmware file size: %d bytes\n", fileSize);
+    Serial.printf("Starting firmware update: %s (%d bytes)\n", filename.c_str(), fileSize);
 
-    // Start firmware update
     if (!Update.begin(fileSize))
     {
-        String errorMsg = "ERROR: Cannot begin firmware update - " + String(Update.getError());
-        server->send(500, "text/plain", errorMsg);
-        Serial.println(errorMsg);
         firmwareFile.close();
+        sendJsonResponse(false, "Cannot begin firmware update");
         return;
     }
 
-    // Send initial response
-    server->send(200, "text/plain", "SUCCESS: Firmware update started...");
+    server->send(200, "text/plain", "Firmware update started...");
 
-    // Perform the update
     size_t written = Update.writeStream(firmwareFile);
     firmwareFile.close();
 
-    if (written == fileSize)
+    if (written == fileSize && Update.end(true))
     {
-        Serial.println("Firmware update written successfully");
-        if (Update.end(true))
-        {
-            Serial.println("Firmware update completed successfully");
-            Serial.println("Restarting device...");
-            delay(1000);
-            ESP.restart();
-        }
-        else
-        {
-            Serial.printf("Firmware update failed to end: %s\n", Update.errorString());
-        }
+        Serial.println("Firmware update successful. Restarting...");
+        delay(1000);
+        ESP.restart();
     }
     else
     {
-        Serial.printf("Firmware update failed: only %d of %d bytes written\n", written, fileSize);
+        Serial.printf("Firmware update failed: %d/%d bytes written\n", written, fileSize);
         Update.abort();
     }
 }
 
-void WebHandlers::handleUpload()
-{
-    if (!SPIFFS.exists("/file_manager.html"))
-    {
-        Serial.println("Error: file_manager.html not found in SPIFFS");
-        server->send(500, "text/plain", "file_manager.html not found in SPIFFS");
-        return;
-    }
-
-    File file = SPIFFS.open("/file_manager.html", "r");
-    if (!file)
-    {
-        Serial.println("Error: Failed to open file_manager.html");
-        server->send(500, "text/plain", "Failed to open file_manager.html");
-        return;
-    }
-
-    if (file.size() == 0)
-    {
-        Serial.println("Error: file_manager.html is empty");
-        server->send(500, "text/plain", "file_manager.html is empty");
-        file.close();
-        return;
-    }
-
-    sendFileInChunks(file, "/file_manager.html");
-    file.close();
-}
-
-void WebHandlers::handleStaticFile()
-{
-    String path = server->uri();
-    Serial.printf("Handling static file request: %s\n", path.c_str());
-
-    if (!SPIFFS.exists(path))
-    {
-        Serial.printf("File %s not found\n", path.c_str());
-        server->send(404, "text/plain", "File not found");
-        return;
-    }
-
-    File file = SPIFFS.open(path, "r");
-    if (!file)
-    {
-        Serial.printf("Failed to open file: %s\n", path.c_str());
-        server->send(500, "text/plain", "Failed to open file");
-        return;
-    }
-
-    sendFileInChunks(file, path);
-    file.close();
-}
-
-void WebHandlers::handleSensorDataPage()
-{
-    if (!SPIFFS.exists("/sensor_data.html"))
-    {
-        Serial.println("Error: sensor_data.html not found in SPIFFS");
-        server->send(500, "text/plain", "sensor_data.html not found in SPIFFS");
-        return;
-    }
-    File file = SPIFFS.open("/sensor_data.html", "r");
-    if (!file)
-    {
-        Serial.println("Error: Failed to open sensor_data.html");
-        server->send(500, "text/plain", "Failed to open sensor_data.html");
-        return;
-    }
-    if (file.size() == 0)
-    {
-        Serial.println("Error: sensor_data.html is empty");
-        server->send(500, "text/plain", "sensor_data.html is empty");
-        file.close();
-        return;
-    }
-    sendFileInChunks(file, "/sensor_data.html");
-    file.close();
-}
-
-// New method to handle setting client ID
-void WebHandlers::handleSetClientId(int &clientId)
-{
-    if (server->hasArg("id"))
-    {
-        int newId = server->arg("id").toInt();
-        if (newId >= 0 && newId <= 15)
-        {
-            clientId = newId;
-            server->send(200, "application/json", "{\"success\":true,\"clientId\":" + String(clientId) + "}");
-            Serial.printf("[CLIENT_ID] Updated to %d via web\n", clientId);
-            return;
-        }
-    }
-    server->send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ID\"}");
-}
+// ========================= SETUP ROUTES =========================
 
 void WebHandlers::setupRoutes(int &clientId)
 {
-    server->on("/", HTTP_GET, [this]()
-               { this->handleRoot(); });
-    server->on("/sensor", HTTP_POST, [this]()
-               { this->handleSensorData(); });
-    server->on("/sensorData", HTTP_GET, [this]()
-               { this->handleGetSensorData(); });
-    server->on("/localSensorData", HTTP_GET, [this]()
-               { this->handleGetLocalSensorData(); });
-    server->on("/setClientId", HTTP_POST, [this, &clientId]()
-               { this->handleSetClientId(clientId); });
-    server->on("/upload", HTTP_GET, [this]()
-               { this->handleUpload(); });
-    server->on("/upload", HTTP_POST, []() {}, [this]()
-               { this->handleFileUpload(); });
-    server->on("/delete", HTTP_POST, [this]()
-               { this->handleDeleteFile(); });
-    server->on("/list", HTTP_GET, [this]()
-               { this->handleListFiles(); });
-    server->on("/firmware", HTTP_GET, [this]()
-               { this->handleFirmware(); });
-    server->on("/firmwareUpdate", HTTP_POST, [this]()
-               { this->handleFirmwareUpdate(); });
-    server->on("/sensorpage", HTTP_GET, [this]()
-               { this->handleSensorDataPage(); });
+    clientIdPtr = &clientId; // Store reference for use in handlers
 
-    // Add static file handler
+    // Main routes
+    server->on("/", HTTP_GET, [this]()
+               { handleRoot(); });
+    server->on("/sensorpage", HTTP_GET, [this]()
+               { handleSensorDataPage(); });
+    server->on("/upload", HTTP_GET, [this]()
+               { handleUpload(); });
+    server->on("/firmware", HTTP_GET, [this]()
+               { handleFirmware(); });
+
+    // API routes
+    server->on("/sensor", HTTP_POST, [this]()
+               { handleSensorData(); });
+    server->on("/sensorData", HTTP_GET, [this]()
+               { handleGetSensorData(); });
+    server->on("/localSensorData", HTTP_GET, [this]()
+               { handleGetLocalSensorData(); });
+    server->on("/setClientId", HTTP_POST, [this]()
+               { handleSetClientId(); });
+
+    // File management
+    server->on("/upload", HTTP_POST, []() {}, [this]()
+               { handleFileUpload(); });
+    server->on("/delete", HTTP_POST, [this]()
+               { handleDeleteFile(); });
+    server->on("/list", HTTP_GET, [this]()
+               { handleListFiles(); });
+    server->on("/firmwareUpdate", HTTP_POST, [this]()
+               { handleFirmwareUpdate(); });
+
+    // Static file handler
     server->onNotFound([this]()
                        {
         String path = server->uri();
         if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".html"))
         {
-            this->handleStaticFile();
+            handleStaticFile();
         }
         else
         {
