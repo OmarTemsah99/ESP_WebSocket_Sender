@@ -8,7 +8,9 @@
 struct SensorData
 {
     String clientId;
-    int value;
+    int touchValue;
+    float batteryVoltage;
+    float batteryPercent;
 };
 
 class SensorManager
@@ -17,7 +19,8 @@ private:
     std::map<String, SensorData> sensorDataMap;
 
 public:
-    void updateSensorData(const String &senderIP, const String &clientId, int sensorValue);
+    void begin(); // Initialize sensor pins
+    void updateSensorData(const String &senderIP, const String &clientId, int touchValue, float batteryVoltage, float batteryPercent);
     String getSensorDataJSON() const;
     const std::map<String, SensorData> &getAllSensorData() const;
     void clearSensorData();
@@ -25,8 +28,10 @@ public:
     String getFormattedSensorData() const;
     String getFormattedSensorData(int minSensors) const;
     // Add for client mode:
-    int getLocalSensorValue() const;
-    String getLocalSensorDataJSON() const; // New method for local sensor data
+    int getLocalTouchValue() const;
+    float getLocalBatteryVoltage() const;
+    float getLocalBatteryPercent() const;
+    String getLocalSensorDataJSON() const;
 };
 
 #endif // SENSOR_MANAGER_H

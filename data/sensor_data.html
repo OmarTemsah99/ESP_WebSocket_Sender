@@ -49,8 +49,18 @@
                 <strong>Client ID (from device):</strong> ${
                   data.clientId || "N/A"
                 }<br>
-                <strong>Sensor Value:</strong> ${
-                  typeof data.value !== "undefined" ? data.value : "N/A"
+                <strong>Touch Value:</strong> ${
+                  typeof data.touch !== "undefined" ? data.touch : "N/A"
+                }<br>
+                <strong>Battery Voltage:</strong> ${
+                  typeof data.batteryVoltage !== "undefined"
+                    ? data.batteryVoltage.toFixed(2) + " V"
+                    : "N/A"
+                }<br>
+                <strong>Battery Percent:</strong> ${
+                  typeof data.batteryPercent !== "undefined"
+                    ? data.batteryPercent.toFixed(1) + "%"
+                    : "N/A"
                 }<br>
               `;
               container.appendChild(div);

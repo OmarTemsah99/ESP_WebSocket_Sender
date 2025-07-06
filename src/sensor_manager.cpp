@@ -1,31 +1,36 @@
 #include "sensor_manager.h"
 #include <WiFi.h>
 
-void SensorManager::updateSensorData(const String &senderIP, const String &clientId, int sensorValue)
+#define TOUCH_PIN 13
+#define BATTERY_PIN 34
+#define TOUCH_THRESHOLD 40
+#define VCC 3.3f
+#define R1 100000.0f            // Adjust as per your voltage divider
+#define R2 10000.0f             // Adjust as per your voltage divider
+#define CALIBRATION_FACTOR 1.0f // Adjust as needed
+
+void SensorManager::updateSensorData(const String &senderIP, const String &clientId, int touchValue, float batteryVoltage, float batteryPercent)
 {
-    sensorDataMap[senderIP] = {clientId, sensorValue};
-    // Serial.printf("Sensor update from %s: clientId=%s, value=%d\n", senderIP.c_str(), clientId.c_str(), sensorValue);
+    sensorDataMap[senderIP] = {clientId, touchValue, batteryVoltage, batteryPercent};
 }
 
 String SensorManager::getSensorDataJSON() const
 {
     String json = "{";
     bool first = true;
-
     for (const auto &pair : sensorDataMap)
     {
         if (!first)
-        {
             json += ",";
-        }
         json += "\"" + pair.first + "\":{";
         json += "\"clientId\":\"" + pair.second.clientId + "\",";
-        json += "\"value\":" + String(pair.second.value);
+        json += "\"touch\":" + String(pair.second.touchValue) + ",";
+        json += "\"batteryVoltage\":" + String(pair.second.batteryVoltage, 2) + ",";
+        json += "\"batteryPercent\":" + String(pair.second.batteryPercent, 1);
         json += "}";
         first = false;
     }
     json += "}";
-
     return json;
 }
 
@@ -48,17 +53,13 @@ String SensorManager::getFormattedSensorData() const
 {
     String result = "TP:";
     bool first = true;
-
     for (const auto &pair : sensorDataMap)
     {
         if (!first)
-        {
             result += ",";
-        }
-        result += String(pair.second.value);
+        result += String(pair.second.touchValue) + "," + String(pair.second.batteryPercent, 1);
         first = false;
     }
-
     return result;
 }
 
@@ -67,63 +68,74 @@ String SensorManager::getFormattedSensorData(int minSensors) const
     String result = "TP:";
     bool first = true;
     int sensorCount = 0;
-
-    // Add actual sensor values
     for (const auto &pair : sensorDataMap)
     {
         if (!first)
-        {
             result += ",";
-        }
-        result += String(pair.second.value);
+        result += String(pair.second.touchValue) + "," + String(pair.second.batteryPercent, 1);
         first = false;
         sensorCount++;
     }
-
-    // Pad with zeros if we have fewer sensors than minSensors
     while (sensorCount < minSensors)
     {
         if (!first)
-        {
             result += ",";
-        }
-        result += "0";
+        result += "0,0.0";
         first = false;
         sensorCount++;
     }
-
     return result;
 }
 
-// Add a method to get this device's own sensor value
-int SensorManager::getLocalSensorValue() const
+int SensorManager::getLocalTouchValue() const
 {
-// If you have a dedicated sensor pin, read it here. For example, using touchRead or analogRead.
-// Example for a touch sensor on GPIO4:
-#define TOUCH_PIN 4
-#define TOUCH_THRESHOLD 40
-    int touchValue = touchRead(TOUCH_PIN);
-    int sensorValue = (touchValue < TOUCH_THRESHOLD) ? 1 : 0;
-    return sensorValue;
+    int touchValue = digitalRead(TOUCH_PIN);
+    return touchValue;
 }
 
-// New method to get local sensor data as JSON
+float SensorManager::getLocalBatteryVoltage() const
+{
+    float totalVoltage = 0.0f;
+    for (int i = 0; i < 100; i++)
+    {
+        int batteryReading = analogRead(BATTERY_PIN);
+        float batteryVoltage = batteryReading * ((VCC / 4096.0f) * (R1 + R2) / R2) * CALIBRATION_FACTOR;
+        totalVoltage += batteryVoltage;
+    }
+    float averageVoltage = totalVoltage / 100.0f;
+    return averageVoltage;
+}
+
+float SensorManager::getLocalBatteryPercent() const
+{
+    float voltage = getLocalBatteryVoltage();
+    float percent = (voltage - 3.2f) / (4.2f - 3.2f) * 100.0f;
+    if (percent < 0)
+        percent = 0;
+    if (percent > 100)
+        percent = 100;
+    return percent;
+}
+
 String SensorManager::getLocalSensorDataJSON() const
 {
     String json = "{";
-
-    // Get local IP address
     String localIP = WiFi.localIP().toString();
     json += "\"ip\":\"" + localIP + "\",";
-
-    // Use global clientId
     extern int clientId;
     json += "\"clientId\":" + String(clientId) + ",";
-
-    // Get local sensor value
-    int sensorValue = getLocalSensorValue();
-    json += "\"value\":" + String(sensorValue);
-
+    int touchValue = getLocalTouchValue();
+    float batteryVoltage = getLocalBatteryVoltage();
+    float batteryPercent = getLocalBatteryPercent();
+    json += "\"touch\":" + String(touchValue) + ",";
+    json += "\"batteryVoltage\":" + String(batteryVoltage, 2) + ",";
+    json += "\"batteryPercent\":" + String(batteryPercent, 1);
     json += "}";
     return json;
+}
+
+void SensorManager::begin()
+{
+    pinMode(TOUCH_PIN, INPUT);
+    pinMode(BATTERY_PIN, INPUT);
 }

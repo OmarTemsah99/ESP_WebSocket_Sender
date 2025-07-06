@@ -82,9 +82,11 @@ void WebHandlers::handleSensorData()
 {
     String senderIP = server->client().remoteIP().toString();
     String clientId = server->arg("clientId");
-    int sensorValue = server->arg("value").toInt();
+    int touchValue = server->arg("touch").toInt();
+    float batteryVoltage = server->arg("batteryVoltage").toFloat();
+    float batteryPercent = server->arg("batteryPercent").toFloat();
 
-    sensorManager->updateSensorData(senderIP, clientId, sensorValue);
+    sensorManager->updateSensorData(senderIP, clientId, touchValue, batteryVoltage, batteryPercent);
     server->send(200, "text/plain", "OK");
 }
 

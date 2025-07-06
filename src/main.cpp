@@ -28,18 +28,23 @@ unsigned long lastLocalDisplay = 0;
 
 void sendSensorDataToServer()
 {
-  int sensorValue = sensorManager.getLocalSensorValue();
+  int touchValue = sensorManager.getLocalTouchValue();
+  float batteryVoltage = sensorManager.getLocalBatteryVoltage();
+  float batteryPercent = sensorManager.getLocalBatteryPercent();
 
   HTTPClient http;
   http.begin(SERVER_URL);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-  String postData = "clientId=" + String(clientId) + "&value=" + String(sensorValue);
+  String postData = "clientId=" + String(clientId) +
+                    "&touch=" + String(touchValue) +
+                    "&batteryVoltage=" + String(batteryVoltage, 2) +
+                    "&batteryPercent=" + String(batteryPercent, 1);
   int responseCode = http.POST(postData);
 
   if (responseCode == 200)
   {
-    Serial.printf("[SEND] ID: %d, Value: %d\n", clientId, sensorValue);
+    Serial.printf("[SEND] ID: %d, Touch: %d, Battery: %.2fV (%.1f%%)\n", clientId, touchValue, batteryVoltage, batteryPercent);
   }
   else
   {
@@ -51,8 +56,10 @@ void sendSensorDataToServer()
 
 void displayLocalSensorData()
 {
-  int sensorValue = sensorManager.getLocalSensorValue();
-  Serial.printf("Local Sensor Value: %d\n", sensorValue);
+  int touchValue = sensorManager.getLocalTouchValue();
+  float batteryVoltage = sensorManager.getLocalBatteryVoltage();
+  float batteryPercent = sensorManager.getLocalBatteryPercent();
+  Serial.printf("Local Touch: %d, Battery: %.2fV (%.1f%%)\n", touchValue, batteryVoltage, batteryPercent);
 }
 
 bool initializeSystem()
@@ -60,6 +67,9 @@ bool initializeSystem()
   // Initialize Serial
   Serial.begin(115200);
   Serial.println("\n=== ESP32-S3 Client Starting ===");
+
+  // Initialize Sensors
+  sensorManager.begin();
 
   // Initialize filesystem
   if (!FilesystemUtils::initSPIFFS())
@@ -98,6 +108,7 @@ void setup()
     while (true)
       delay(1000); // Stop execution
   }
+  sensorManager.begin(); // Initialize sensor pins
 }
 
 void loop()
@@ -121,7 +132,7 @@ void loop()
   }
 
   // Display local sensor data (every second)
-  if (currentTime - lastLocalDisplay >= 1000)
+  if (currentTime - lastLocalDisplay >= 200)
   {
     displayLocalSensorData();
     lastLocalDisplay = currentTime;
