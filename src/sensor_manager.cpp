@@ -1,5 +1,6 @@
 #include "sensor_manager.h"
 #include <WiFi.h>
+#include "client_config.h" // Needed for updated local clientId usage
 
 #define TOUCH_PIN 13
 #define BATTERY_PIN 34
@@ -89,8 +90,7 @@ String SensorManager::getFormattedSensorData(int minSensors) const
 
 int SensorManager::getLocalTouchValue() const
 {
-    int touchValue = digitalRead(TOUCH_PIN);
-    return touchValue;
+    return digitalRead(TOUCH_PIN);
 }
 
 float SensorManager::getLocalBatteryVoltage() const
@@ -102,18 +102,14 @@ float SensorManager::getLocalBatteryVoltage() const
         float batteryVoltage = batteryReading * ((VCC / 4096.0f) * (R1 + R2) / R2) * CALIBRATION_FACTOR;
         totalVoltage += batteryVoltage;
     }
-    float averageVoltage = totalVoltage / 100.0f;
-    return averageVoltage;
+    return totalVoltage / 100.0f;
 }
 
 float SensorManager::getLocalBatteryPercent() const
 {
     float voltage = getLocalBatteryVoltage();
     float percent = (voltage - 3.2f) / (4.2f - 3.2f) * 100.0f;
-    if (percent < 0)
-        percent = 0;
-    if (percent > 100)
-        percent = 100;
+    percent = constrain(percent, 0.0f, 100.0f);
     return percent;
 }
 
@@ -122,7 +118,12 @@ String SensorManager::getLocalSensorDataJSON() const
     String json = "{";
     String localIP = WiFi.localIP().toString();
     json += "\"ip\":\"" + localIP + "\",";
-    extern int clientId;
+
+    ClientConfig clientCfg;
+    clientCfg.begin();
+    int clientId = clientCfg.getClientId();
+    clientCfg.end();
+
     json += "\"clientId\":" + String(clientId) + ",";
     int touchValue = getLocalTouchValue();
     float batteryVoltage = getLocalBatteryVoltage();
