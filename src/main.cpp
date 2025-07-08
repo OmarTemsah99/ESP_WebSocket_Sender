@@ -21,6 +21,11 @@ ClientIdentity clientIdentity(&clientConfig);
 WebHandlers webHandlers(&server, &sensorManager, &clientIdentity);
 
 // ========================= GLOBAL VARIABLES =========================
+#define BTN_INC_PIN 4
+#define BTN_DEC_PIN 15
+#define DEBOUNCE_DELAY 200 // milliseconds
+
+unsigned long lastButtonTime = 0;
 
 // ========================= CLIENT CONFIGURATION =========================
 const char *SERVER_URL = "http://192.168.1.200/sensor";
@@ -109,10 +114,33 @@ void setup()
     while (true)
       delay(1000);
   }
+
+  pinMode(BTN_INC_PIN, INPUT);
+  pinMode(BTN_DEC_PIN, INPUT);
 }
 
 void loop()
 {
+  // Check buttons
+  unsigned long now = millis();
+  if (now - lastButtonTime > DEBOUNCE_DELAY)
+  {
+    if (digitalRead(BTN_INC_PIN) == HIGH)
+    {
+      int id = clientIdentity.get();
+      clientIdentity.set(min(id + 1, 15));
+      Serial.printf("[BUTTON] Increased ID to %d\n", clientIdentity.get());
+      lastButtonTime = now;
+    }
+    else if (digitalRead(BTN_DEC_PIN) == HIGH)
+    {
+      int id = clientIdentity.get();
+      clientIdentity.set(max(id - 1, 0));
+      Serial.printf("[BUTTON] Decreased ID to %d\n", clientIdentity.get());
+      lastButtonTime = now;
+    }
+  }
+
   unsigned long currentTime = millis();
   wifiManager.handleConnection();
 
