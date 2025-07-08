@@ -18,6 +18,9 @@ WiFiManager wifiManager;
 ClientConfig clientConfig;
 WebHandlers webHandlers(&server, &sensorManager, &clientConfig);
 
+// ========================= GLOBAL VARIABLES =========================
+int clientId = 0;
+
 // ========================= CLIENT CONFIGURATION =========================
 const char *SERVER_URL = "http://192.168.1.200/sensor";
 const unsigned long SEND_INTERVAL = 200; // ms
@@ -71,6 +74,7 @@ bool initializeSystem()
 
   sensorManager.begin();
   clientConfig.begin();
+  clientId = clientConfig.getClientId();
 
   if (!FilesystemUtils::initSPIFFS())
   {
