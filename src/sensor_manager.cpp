@@ -1,6 +1,5 @@
 #include "sensor_manager.h"
 #include <WiFi.h>
-#include "client_config.h" // Needed for updated local clientId usage
 
 #define TOUCH_PIN 13
 #define BATTERY_PIN 34
@@ -119,10 +118,7 @@ String SensorManager::getLocalSensorDataJSON() const
     String localIP = WiFi.localIP().toString();
     json += "\"ip\":\"" + localIP + "\",";
 
-    ClientConfig clientCfg;
-    clientCfg.begin();
-    int clientId = clientCfg.getClientId();
-    clientCfg.end();
+    int clientId = clientIdentity ? clientIdentity->get() : 0;
 
     json += "\"clientId\":" + String(clientId) + ",";
     int touchValue = getLocalTouchValue();
@@ -135,8 +131,9 @@ String SensorManager::getLocalSensorDataJSON() const
     return json;
 }
 
-void SensorManager::begin()
+void SensorManager::begin(ClientIdentity *identity)
 {
     pinMode(TOUCH_PIN, INPUT);
     pinMode(BATTERY_PIN, INPUT);
+    clientIdentity = identity;
 }

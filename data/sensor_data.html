@@ -5,16 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/styles.css" />
     <script>
+      async function fetchDeviceClientId() {
+        try {
+          const res = await fetch("/getClientId");
+          const data = await res.json();
+          if (typeof data.clientId === "number") {
+            localStorage.setItem("clientId", data.clientId);
+            return data.clientId;
+          }
+        } catch (e) {
+          console.error("Failed to fetch device clientId", e);
+        }
+        return 0;
+      }
+
       function getClientId() {
         let id = parseInt(localStorage.getItem("clientId"));
-        if (isNaN(id) || id < 0 || id > 15) id = 0;
-        return id;
+        return isNaN(id) || id < 0 || id > 15 ? 0 : id;
+      }
+
+      function updateClientIdDisplay() {
+        document.getElementById("clientIdValue").textContent = getClientId();
       }
 
       function setClientId(id) {
         id = Math.max(0, Math.min(15, id));
         localStorage.setItem("clientId", id);
         updateClientIdDisplay();
+
         fetch("/setClientId", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -27,19 +45,14 @@
           .catch(() => alert("Failed to set device ID!"));
       }
 
-      function updateClientIdDisplay() {
-        document.getElementById("clientIdValue").textContent = getClientId();
-      }
-
       function changeClientId(delta) {
         let id = getClientId();
-        id = Math.max(0, Math.min(15, id + delta));
-        setClientId(id);
+        setClientId(id + delta);
       }
 
       function loadLocalSensorData() {
         fetch("/localSensorData")
-          .then((response) => response.json())
+          .then((res) => res.json())
           .then((data) => {
             const container = document.getElementById("sensorDataContainer");
             container.innerHTML = "";
@@ -68,23 +81,24 @@
               container.appendChild(div);
             } else {
               container.innerHTML =
-                '<div class="info">Error loading local sensor data.</div>';
+                '<div class="info">Error loading data.</div>';
             }
           })
           .catch((err) => {
+            console.error("Fetch error:", err);
             document.getElementById("sensorDataContainer").innerHTML =
               '<div class="info">Error loading local sensor data.</div>';
-            console.error("Error:", err);
           });
       }
 
-      window.addEventListener("load", () => {
+      window.addEventListener("load", async () => {
+        const syncedId = await fetchDeviceClientId();
+        localStorage.setItem("clientId", syncedId);
         updateClientIdDisplay();
         document.getElementById("decreaseBtn").onclick = () =>
           changeClientId(-1);
         document.getElementById("increaseBtn").onclick = () =>
           changeClientId(1);
-        setClientId(getClientId());
         loadLocalSensorData();
         setInterval(loadLocalSensorData, 200);
       });
@@ -98,7 +112,7 @@
         <button class="btn btn-id" id="decreaseBtn">-</button>
         <button class="btn btn-id" id="increaseBtn">+</button>
         <div class="info">
-          (ID is now sent to the device and used for server updates.)
+          (ID is now saved to device and used for all transmissions.)
         </div>
       </div>
       <div id="sensorDataContainer">Loading...</div>

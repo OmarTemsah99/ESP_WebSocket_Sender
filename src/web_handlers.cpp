@@ -1,9 +1,9 @@
 #include "web_handlers.h"
 #include <Update.h>
-#include "client_config.h"
+#include "ClientIdentity.h"
 
-WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr, ClientConfig *clientCfg)
-    : server(webServer), sensorManager(sensorMgr), clientConfig(clientCfg) {}
+WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr, ClientIdentity *clientIdentity)
+    : server(webServer), sensorManager(sensorMgr), clientIdentity(clientIdentity) {}
 
 String WebHandlers::getContentType(String filename)
 {
@@ -91,7 +91,7 @@ void WebHandlers::handleSetClientId()
         sendJsonResponse(false, "ID must be between 0-15");
         return;
     }
-    clientConfig->setClientId(newId);
+    clientIdentity->set(newId);
     sendJsonResponse(true, "Client ID updated", "\"clientId\":" + String(newId));
     Serial.printf("[CLIENT_ID] Updated to %d\n", newId);
 }
@@ -224,6 +224,12 @@ void WebHandlers::setupRoutes()
                { handleGetLocalSensorData(); });
     server->on("/setClientId", HTTP_POST, [this]()
                { handleSetClientId(); });
+
+    server->on("/getClientId", HTTP_GET, [this]()
+               {
+    int id = clientIdentity->get();
+    server->send(200, "application/json", "{\"clientId\":" + String(id) + "}"); });
+
     server->on("/upload", HTTP_POST, []() {}, [this]()
                { handleFileUpload(); });
     server->on("/delete", HTTP_POST, [this]()

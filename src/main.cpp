@@ -10,16 +10,17 @@
 #include "wifi_manager.h"
 #include "filesystem_utils.h"
 #include "client_config.h"
+#include "ClientIdentity.h"
 
 // ========================= GLOBAL OBJECTS =========================
 SensorManager sensorManager;
 WebServer server(WEB_SERVER_PORT);
 WiFiManager wifiManager;
 ClientConfig clientConfig;
-WebHandlers webHandlers(&server, &sensorManager, &clientConfig);
+ClientIdentity clientIdentity(&clientConfig);
+WebHandlers webHandlers(&server, &sensorManager, &clientIdentity);
 
 // ========================= GLOBAL VARIABLES =========================
-int clientId = 0;
 
 // ========================= CLIENT CONFIGURATION =========================
 const char *SERVER_URL = "http://192.168.1.200/sensor";
@@ -35,7 +36,7 @@ void sendSensorDataToServer()
   int touchValue = sensorManager.getLocalTouchValue();
   float batteryVoltage = sensorManager.getLocalBatteryVoltage();
   float batteryPercent = sensorManager.getLocalBatteryPercent();
-  int clientId = clientConfig.getClientId();
+  int clientId = clientIdentity.get();
 
   HTTPClient http;
   http.begin(SERVER_URL);
@@ -72,9 +73,8 @@ bool initializeSystem()
   Serial.begin(115200);
   Serial.println("\n=== ESP32-S3 Client Starting ===");
 
-  sensorManager.begin();
-  clientConfig.begin();
-  clientId = clientConfig.getClientId();
+  clientIdentity.begin();
+  sensorManager.begin(&clientIdentity);
 
   if (!FilesystemUtils::initSPIFFS())
   {

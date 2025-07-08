@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <Arduino.h>
+#include "ClientIdentity.h"
 
 struct SensorData
 {
@@ -17,9 +18,10 @@ class SensorManager
 {
 private:
     std::map<String, SensorData> sensorDataMap;
+    ClientIdentity *clientIdentity = nullptr;
 
 public:
-    void begin(); // Initialize sensor pins
+    void begin(ClientIdentity *identity); // Initialize sensor pins
     void updateSensorData(const String &senderIP, const String &clientId, int touchValue, float batteryVoltage, float batteryPercent);
     String getSensorDataJSON() const;
     const std::map<String, SensorData> &getAllSensorData() const;

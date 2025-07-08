@@ -5,14 +5,14 @@
 #include <WebServer.h>
 #include <SPIFFS.h>
 #include "sensor_manager.h"
-#include "client_config.h"
+#include "ClientIdentity.h"
 
 class WebHandlers
 {
 private:
     WebServer *server;
     SensorManager *sensorManager;
-    ClientConfig *clientConfig;
+    ClientIdentity *clientIdentity;
 
     String getContentType(String filename);
     bool sendFile(String path);
@@ -20,7 +20,7 @@ private:
     void sendJsonResponse(bool success, String message = "", String data = "");
 
 public:
-    WebHandlers(WebServer *webServer, SensorManager *sensorMgr, ClientConfig *clientCfg);
+    WebHandlers(WebServer *webServer, SensorManager *sensorMgr, ClientIdentity *clientIdentity);
 
     void setupRoutes();
 
