@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
+#include <U8g2lib.h>
 
 // Project headers
 #include "config.h"
@@ -20,6 +21,9 @@ ClientConfig clientConfig;
 ClientIdentity clientIdentity(&clientConfig);
 WebHandlers webHandlers(&server, &sensorManager, &clientIdentity);
 
+// object for the display control
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE, /* clock=*/22, /* data=*/21);
+
 // ========================= GLOBAL VARIABLES =========================
 #define BTN_INC_PIN 4
 #define BTN_DEC_PIN 15
@@ -33,6 +37,10 @@ int lastButtonStateDec = HIGH;
 unsigned long lastDebounceTimeDec = 0;
 
 const unsigned long debounceDelay = 50;
+
+/* update rate for display */
+unsigned long previousMillis_Display = 0;
+const long interval_Display = 100;
 
 // ========================= CLIENT CONFIGURATION =========================
 const char *SERVER_URL = "http://192.168.1.200/sensor";
@@ -154,10 +162,14 @@ void setup()
 
   pinMode(BTN_INC_PIN, INPUT);
   pinMode(BTN_DEC_PIN, INPUT);
+
+  u8g2.begin();
 }
 
 void loop()
 {
+  unsigned long currentMillis_Display = millis();
+
   handleButton(lastButtonStateInc, buttonStateInc, lastDebounceTimeInc, BTN_INC_PIN, +1);
   handleButton(lastButtonStateDec, buttonStateDec, lastDebounceTimeDec, BTN_DEC_PIN, -1);
 
@@ -172,6 +184,41 @@ void loop()
       sendSensorDataToServer();
       lastSensorSend = currentTime;
     }
+  }
+
+  /* Interface Update */
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  if (currentMillis_Display - previousMillis_Display >= interval_Display)
+  {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.drawStr(5, 10, "SomniaSoltions");
+
+    // Get sensor data
+    int displayId = clientIdentity.get();
+    int displayTouch = sensorManager.getLocalTouchValue();
+    float displayBatteryPercent = sensorManager.getLocalBatteryPercent();
+
+    // ID
+    u8g2.drawStr(5, 25, "ID: ");
+    u8g2.setCursor(25, 25);
+    u8g2.print(displayId);
+
+    // Touch State
+    u8g2.drawStr(5, 40, "State: ");
+    u8g2.setCursor(36, 40);
+    u8g2.print(displayTouch);
+
+    // Battery Percentage
+    u8g2.drawStr(5, 55, "Battery: ");
+    u8g2.setCursor(50, 55);
+    u8g2.print(displayBatteryPercent, 1);
+    u8g2.print("%");
+
+    u8g2.sendBuffer();
+
+    previousMillis_Display = currentMillis_Display;
   }
 
   // if (currentTime - lastLocalDisplay >= SEND_INTERVAL)
