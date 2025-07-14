@@ -1,6 +1,7 @@
 // ==================== main.cpp ====================
 #include <Arduino.h>
-#include <WebServer.h>
+#include <ESPAsyncWebServer.h> // Changed from WebServer.h
+#include <AsyncTCP.h>          // Required for ESPAsyncWebServer
 #include <HTTPClient.h>
 #include <U8g2lib.h>
 
@@ -15,7 +16,7 @@
 
 // ========================= GLOBAL OBJECTS =========================
 SensorManager sensorManager;
-WebServer server(WEB_SERVER_PORT);
+AsyncWebServer server(WEB_SERVER_PORT); // Changed from WebServer
 WiFiManager wifiManager;
 ClientConfig clientConfig;
 ClientIdentity clientIdentity(&clientConfig);
@@ -178,7 +179,7 @@ void loop()
 
   if (wifiManager.isConnected())
   {
-    server.handleClient();
+    // No need to call server.handleClient() with async server
     if (currentTime - lastSensorSend >= SEND_INTERVAL)
     {
       sendSensorDataToServer();
@@ -187,8 +188,6 @@ void loop()
   }
 
   /* Interface Update */
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
   if (currentMillis_Display - previousMillis_Display >= interval_Display)
   {
     u8g2.clearBuffer();
@@ -220,10 +219,4 @@ void loop()
 
     previousMillis_Display = currentMillis_Display;
   }
-
-  // if (currentTime - lastLocalDisplay >= SEND_INTERVAL)
-  // {
-  //   displayLocalSensorData();
-  //   lastLocalDisplay = currentTime;
-  // }
 }

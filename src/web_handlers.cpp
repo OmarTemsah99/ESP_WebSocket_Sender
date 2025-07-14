@@ -2,7 +2,7 @@
 #include <Update.h>
 #include "ClientIdentity.h"
 
-WebHandlers::WebHandlers(WebServer *webServer, SensorManager *sensorMgr, ClientIdentity *clientIdentity)
+WebHandlers::WebHandlers(AsyncWebServer *webServer, SensorManager *sensorMgr, ClientIdentity *clientIdentity)
     : server(webServer), sensorManager(sensorMgr), clientIdentity(clientIdentity) {}
 
 String WebHandlers::getContentType(String filename)
@@ -18,21 +18,16 @@ String WebHandlers::getContentType(String filename)
     return "text/plain";
 }
 
-bool WebHandlers::sendFile(String path)
+bool WebHandlers::sendFile(String path, AsyncWebServerRequest *request)
 {
     if (!SPIFFS.exists(path))
     {
-        server->send(404, "text/plain", "File not found");
+        request->send(404, "text/plain", "File not found");
         return false;
     }
-    File file = SPIFFS.open(path, "r");
-    if (!file)
-    {
-        server->send(500, "text/plain", "Cannot open file");
-        return false;
-    }
-    server->streamFile(file, getContentType(path));
-    file.close();
+
+    String contentType = getContentType(path);
+    request->send(SPIFFS, path, contentType);
     return true;
 }
 
@@ -41,7 +36,7 @@ bool WebHandlers::isValidFileExtension(String filename)
     return filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".js") || filename.endsWith(".bin");
 }
 
-void WebHandlers::sendJsonResponse(bool success, String message, String data)
+void WebHandlers::sendJsonResponse(AsyncWebServerRequest *request, bool success, String message, String data)
 {
     String json = "{\"success\":" + String(success ? "true" : "false");
     if (message.length() > 0)
@@ -49,114 +44,162 @@ void WebHandlers::sendJsonResponse(bool success, String message, String data)
     if (data.length() > 0)
         json += "," + data;
     json += "}";
-    server->send(success ? 200 : 400, "application/json", json);
+    request->send(success ? 200 : 400, "application/json", json);
 }
 
-void WebHandlers::handleRoot() { sendFile("/index.html"); }
-void WebHandlers::handleStaticFile() { sendFile(server->uri()); }
-
-void WebHandlers::handleSensorData()
+void WebHandlers::handleRoot(AsyncWebServerRequest *request)
 {
-    String ip = server->client().remoteIP().toString();
-    int touch = server->arg("touch").toInt();
-    float voltage = server->arg("batteryVoltage").toFloat();
-    float percent = server->arg("batteryPercent").toFloat();
-    String clientId = server->arg("clientId");
+    sendFile("/index.html", request);
+}
+
+void WebHandlers::handleStaticFile(AsyncWebServerRequest *request)
+{
+    sendFile(request->url(), request);
+}
+
+void WebHandlers::handleSensorData(AsyncWebServerRequest *request)
+{
+    String ip = request->client()->remoteIP().toString();
+    int touch = 0;
+    float voltage = 0.0;
+    float percent = 0.0;
+    String clientId = "0";
+
+    if (request->hasParam("touch"))
+        touch = request->getParam("touch")->value().toInt();
+    if (request->hasParam("batteryVoltage"))
+        voltage = request->getParam("batteryVoltage")->value().toFloat();
+    if (request->hasParam("batteryPercent"))
+        percent = request->getParam("batteryPercent")->value().toFloat();
+    if (request->hasParam("clientId"))
+        clientId = request->getParam("clientId")->value();
+
     sensorManager->updateSensorData(ip, clientId, touch, voltage, percent);
-    server->send(200, "text/plain", "OK");
+    request->send(200, "text/plain", "OK");
 }
 
-void WebHandlers::handleGetSensorData()
+void WebHandlers::handleGetSensorData(AsyncWebServerRequest *request)
 {
-    server->send(200, "application/json", sensorManager->getSensorDataJSON());
+    request->send(200, "application/json", sensorManager->getSensorDataJSON());
 }
 
-void WebHandlers::handleGetLocalSensorData()
+void WebHandlers::handleGetLocalSensorData(AsyncWebServerRequest *request)
 {
-    server->send(200, "application/json", sensorManager->getLocalSensorDataJSON());
+    request->send(200, "application/json", sensorManager->getLocalSensorDataJSON());
 }
 
-void WebHandlers::handleSensorDataPage() { sendFile("/sensor_data.html"); }
-
-void WebHandlers::handleSetClientId()
+void WebHandlers::handleSensorDataPage(AsyncWebServerRequest *request)
 {
-    if (!server->hasArg("id"))
+    sendFile("/sensor_data.html", request);
+}
+
+void WebHandlers::handleSetClientId(AsyncWebServerRequest *request)
+{
+    String idParam = "";
+
+    // Check both POST body parameters and URL parameters
+    if (request->hasParam("id", true))
+    { // true = POST body parameter
+        idParam = request->getParam("id", true)->value();
+    }
+    else if (request->hasParam("id", false))
+    { // false = URL parameter
+        idParam = request->getParam("id", false)->value();
+    }
+
+    Serial.printf("[CLIENT_ID] Received request, idParam: '%s'\n", idParam.c_str());
+
+    if (idParam.isEmpty())
     {
-        sendJsonResponse(false, "Missing ID parameter");
+        sendJsonResponse(request, false, "Missing ID parameter");
+        Serial.println("[CLIENT_ID] Missing ID parameter");
         return;
     }
-    int newId = server->arg("id").toInt();
+
+    int newId = idParam.toInt();
     if (newId < 0 || newId > 15)
     {
-        sendJsonResponse(false, "ID must be between 0-15");
+        sendJsonResponse(request, false, "ID must be between 0-15");
+        Serial.printf("[CLIENT_ID] Invalid ID: %d\n", newId);
         return;
     }
+
     clientIdentity->set(newId);
-    sendJsonResponse(true, "Client ID updated", "\"clientId\":" + String(newId));
-    Serial.printf("[CLIENT_ID] Updated to %d\n", newId);
+    sendJsonResponse(request, true, "Client ID updated", "\"clientId\":" + String(newId));
+    Serial.printf("[CLIENT_ID] Successfully updated to %d\n", newId);
 }
 
-void WebHandlers::handleUpload() { sendFile("/file_manager.html"); }
-
-void WebHandlers::handleFileUpload()
+void WebHandlers::handleUpload(AsyncWebServerRequest *request)
 {
-    HTTPUpload &upload = server->upload();
-    static File uploadFile;
-    static bool uploadSuccess = false;
+    sendFile("/file_manager.html", request);
+}
 
-    switch (upload.status)
+void WebHandlers::handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
+{
+    static File uploadFile;
+
+    if (index == 0) // Start of upload
     {
-    case UPLOAD_FILE_START:
-    {
-        String filename = upload.filename;
         if (!filename.startsWith("/"))
             filename = "/" + filename;
         if (!isValidFileExtension(filename))
         {
-            sendJsonResponse(false, "Invalid file type");
+            request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid file type\"}");
             return;
         }
         uploadFile = SPIFFS.open(filename, "w");
-        uploadSuccess = uploadFile;
-        break;
+        if (!uploadFile)
+        {
+            request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to create file\"}");
+            return;
+        }
     }
-    case UPLOAD_FILE_WRITE:
+
+    if (uploadFile && len > 0)
+    {
+        uploadFile.write(data, len);
+    }
+
+    if (final) // End of upload
+    {
         if (uploadFile)
-            uploadFile.write(upload.buf, upload.currentSize);
-        break;
-    case UPLOAD_FILE_END:
-        if (uploadFile)
+        {
             uploadFile.close();
-        sendJsonResponse(uploadSuccess, uploadSuccess ? "Upload complete" : "Upload failed");
-        break;
-    case UPLOAD_FILE_ABORTED:
-        if (uploadFile)
-            uploadFile.close();
-        sendJsonResponse(false, "Upload aborted");
-        break;
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"Upload complete\"}");
+        }
+        else
+        {
+            request->send(500, "application/json", "{\"success\":false,\"message\":\"Upload failed\"}");
+        }
     }
 }
 
-void WebHandlers::handleDeleteFile()
+void WebHandlers::handleDeleteFile(AsyncWebServerRequest *request)
 {
-    String filename = server->arg("file");
+    String filename = "";
+    if (request->hasParam("file"))
+        filename = request->getParam("file")->value();
+
     if (filename.isEmpty())
     {
-        sendJsonResponse(false, "No file specified");
+        sendJsonResponse(request, false, "No file specified");
         return;
     }
+
     if (!filename.startsWith("/"))
         filename = "/" + filename;
+
     bool success = SPIFFS.remove(filename);
-    sendJsonResponse(success, success ? "File deleted" : "Delete failed");
+    sendJsonResponse(request, success, success ? "File deleted" : "Delete failed");
 }
 
-void WebHandlers::handleListFiles()
+void WebHandlers::handleListFiles(AsyncWebServerRequest *request)
 {
     String json = "[";
     File root = SPIFFS.open("/");
     File file = root.openNextFile();
     bool first = true;
+
     while (file)
     {
         if (!first)
@@ -165,42 +208,51 @@ void WebHandlers::handleListFiles()
         first = false;
         file = root.openNextFile();
     }
+
     json += "]";
-    server->send(200, "application/json", json);
+    request->send(200, "application/json", json);
 }
 
-void WebHandlers::handleFirmware() { sendFile("/firmware_update.html"); }
-
-void WebHandlers::handleFirmwareUpdate()
+void WebHandlers::handleFirmware(AsyncWebServerRequest *request)
 {
-    String filename = server->arg("file");
+    sendFile("/firmware_update.html", request);
+}
+
+void WebHandlers::handleFirmwareUpdate(AsyncWebServerRequest *request)
+{
+    String filename = "";
+    if (request->hasParam("file"))
+        filename = request->getParam("file")->value();
+
     if (!filename.startsWith("/"))
         filename = "/" + filename;
     if (!filename.endsWith(".bin"))
     {
-        sendJsonResponse(false, "File must be .bin");
+        sendJsonResponse(request, false, "File must be .bin");
         Serial.println("[FW UPDATE] File must be .bin");
         return;
     }
+
     if (!SPIFFS.exists(filename))
     {
-        sendJsonResponse(false, "Firmware file not found");
+        sendJsonResponse(request, false, "Firmware file not found");
         Serial.println("[FW UPDATE] Firmware file not found");
         return;
     }
+
     File firmwareFile = SPIFFS.open(filename);
     if (!firmwareFile)
     {
-        sendJsonResponse(false, "Failed to open firmware file");
+        sendJsonResponse(request, false, "Failed to open firmware file");
         Serial.println("[FW UPDATE] Failed to open firmware file");
         return;
     }
 
-    size_t firmwareSize = firmwareFile.size(); // Get size BEFORE closing
+    size_t firmwareSize = firmwareFile.size();
     if (!Update.begin(firmwareSize))
     {
         firmwareFile.close();
-        sendJsonResponse(false, "Failed to begin update: " + String(Update.errorString()));
+        sendJsonResponse(request, false, "Failed to begin update: " + String(Update.errorString()));
         Serial.print("[FW UPDATE] Update.begin failed: ");
         Serial.println(Update.errorString());
         return;
@@ -212,7 +264,7 @@ void WebHandlers::handleFirmwareUpdate()
     if (written != firmwareSize)
     {
         Update.abort();
-        sendJsonResponse(false, "Update write failed: " + String(Update.errorString()));
+        sendJsonResponse(request, false, "Update write failed: " + String(Update.errorString()));
         Serial.print("[FW UPDATE] Update.writeStream failed: ");
         Serial.println(Update.errorString());
         return;
@@ -220,13 +272,13 @@ void WebHandlers::handleFirmwareUpdate()
 
     if (!Update.end(true))
     {
-        sendJsonResponse(false, "Update end failed: " + String(Update.errorString()));
+        sendJsonResponse(request, false, "Update end failed: " + String(Update.errorString()));
         Serial.print("[FW UPDATE] Update.end failed: ");
         Serial.println(Update.errorString());
         return;
     }
 
-    sendJsonResponse(true, "Firmware update successful, restarting...");
+    sendJsonResponse(request, true, "Firmware update successful, restarting...");
     Serial.println("[FW UPDATE] Firmware update successful, restarting...");
     delay(200);
     ESP.restart();
@@ -234,42 +286,59 @@ void WebHandlers::handleFirmwareUpdate()
 
 void WebHandlers::setupRoutes()
 {
-    server->on("/", HTTP_GET, [this]()
-               { handleRoot(); });
-    server->on("/sensorpage", HTTP_GET, [this]()
-               { handleSensorDataPage(); });
-    server->on("/upload", HTTP_GET, [this]()
-               { handleUpload(); });
-    server->on("/firmware", HTTP_GET, [this]()
-               { handleFirmware(); });
-    server->on("/sensor", HTTP_POST, [this]()
-               { handleSensorData(); });
-    server->on("/sensorData", HTTP_GET, [this]()
-               { handleGetSensorData(); });
-    server->on("/localSensorData", HTTP_GET, [this]()
-               { handleGetLocalSensorData(); });
-    server->on("/setClientId", HTTP_POST, [this]()
-               { handleSetClientId(); });
+    server->on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleRoot(request); });
 
-    server->on("/getClientId", HTTP_GET, [this]()
+    server->on("/sensorpage", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleSensorDataPage(request); });
+
+    server->on("/upload", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleUpload(request); });
+
+    server->on("/firmware", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleFirmware(request); });
+
+    server->on("/sensor", HTTP_POST, [this](AsyncWebServerRequest *request)
+               { handleSensorData(request); });
+
+    server->on("/sensorData", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleGetSensorData(request); });
+
+    server->on("/localSensorData", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleGetLocalSensorData(request); });
+
+    server->on("/setClientId", HTTP_POST, [this](AsyncWebServerRequest *request)
+               { handleSetClientId(request); });
+
+    server->on("/getClientId", HTTP_GET, [this](AsyncWebServerRequest *request)
                {
-    int id = clientIdentity->get();
-    server->send(200, "application/json", "{\"clientId\":" + String(id) + "}"); });
+        int id = clientIdentity->get();
+        request->send(200, "application/json", "{\"clientId\":" + String(id) + "}"); });
 
-    server->on("/upload", HTTP_POST, []() {}, [this]()
-               { handleFileUpload(); });
-    server->on("/delete", HTTP_POST, [this]()
-               { handleDeleteFile(); });
-    server->on("/list", HTTP_GET, [this]()
-               { handleListFiles(); });
-    server->on("/firmwareUpdate", HTTP_POST, [this]()
-               { handleFirmwareUpdate(); });
-    server->onNotFound([this]()
+    // File upload handler
+    server->on("/upload", HTTP_POST, [](AsyncWebServerRequest *request)
+               {
+                   // This will be handled by the upload handler
+               },
+               [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
+               { handleFileUpload(request, filename, index, data, len, final); });
+
+    server->on("/delete", HTTP_POST, [this](AsyncWebServerRequest *request)
+               { handleDeleteFile(request); });
+
+    server->on("/list", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleListFiles(request); });
+
+    server->on("/firmwareUpdate", HTTP_POST, [this](AsyncWebServerRequest *request)
+               { handleFirmwareUpdate(request); });
+
+    // Static file handler
+    server->onNotFound([this](AsyncWebServerRequest *request)
                        {
-        String path = server->uri();
+        String path = request->url();
         if (path.endsWith(".html") || path.endsWith(".css") || path.endsWith(".js")) {
-            handleStaticFile();
+            handleStaticFile(request);
         } else {
-            server->send(404, "text/plain", "Not found");
+            request->send(404, "text/plain", "Not found");
         } });
 }
