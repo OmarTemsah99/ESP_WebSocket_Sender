@@ -179,31 +179,57 @@ void WebHandlers::handleFirmwareUpdate()
     if (!filename.endsWith(".bin"))
     {
         sendJsonResponse(false, "File must be .bin");
+        Serial.println("[FW UPDATE] File must be .bin");
         return;
     }
     if (!SPIFFS.exists(filename))
     {
         sendJsonResponse(false, "Firmware file not found");
+        Serial.println("[FW UPDATE] Firmware file not found");
         return;
     }
     File firmwareFile = SPIFFS.open(filename);
-    if (!Update.begin(firmwareFile.size()))
+    if (!firmwareFile)
     {
-        firmwareFile.close();
-        sendJsonResponse(false, "Failed to begin update");
+        sendJsonResponse(false, "Failed to open firmware file");
+        Serial.println("[FW UPDATE] Failed to open firmware file");
         return;
     }
-    server->send(200, "text/plain", "Firmware update started");
+
+    size_t firmwareSize = firmwareFile.size(); // Get size BEFORE closing
+    if (!Update.begin(firmwareSize))
+    {
+        firmwareFile.close();
+        sendJsonResponse(false, "Failed to begin update: " + String(Update.errorString()));
+        Serial.print("[FW UPDATE] Update.begin failed: ");
+        Serial.println(Update.errorString());
+        return;
+    }
+
     size_t written = Update.writeStream(firmwareFile);
     firmwareFile.close();
-    if (written == firmwareFile.size() && Update.end(true))
-    {
-        ESP.restart();
-    }
-    else
+
+    if (written != firmwareSize)
     {
         Update.abort();
+        sendJsonResponse(false, "Update write failed: " + String(Update.errorString()));
+        Serial.print("[FW UPDATE] Update.writeStream failed: ");
+        Serial.println(Update.errorString());
+        return;
     }
+
+    if (!Update.end(true))
+    {
+        sendJsonResponse(false, "Update end failed: " + String(Update.errorString()));
+        Serial.print("[FW UPDATE] Update.end failed: ");
+        Serial.println(Update.errorString());
+        return;
+    }
+
+    sendJsonResponse(true, "Firmware update successful, restarting...");
+    Serial.println("[FW UPDATE] Firmware update successful, restarting...");
+    delay(200);
+    ESP.restart();
 }
 
 void WebHandlers::setupRoutes()
